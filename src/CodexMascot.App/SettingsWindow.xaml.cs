@@ -53,6 +53,22 @@ public partial class SettingsWindow : Window
         global.Children.Add(Check("클릭 통과", _manager.Configuration.Global.ClickThrough, v => _manager.Configuration.Global.ClickThrough = v));
         global.Children.Add(Check("대기 캐릭터 표시", _manager.Configuration.Global.ShowIdle, v => _manager.Configuration.Global.ShowIdle = v));
         content.Children.Add(global);
+        content.Children.Add(Check("완료 팝업을 클릭할 때까지 유지", _manager.Configuration.Global.KeepCompletedVisibleUntilClick, v =>
+        { _manager.Configuration.Global.KeepCompletedVisibleUntilClick = v; BuildEditor(); }));
+        content.Children.Add(Text("켜면 완료 팝업이 시간 제한 없이 유지됩니다. 캐릭터 클릭 또는 ×로 닫으세요. 이 팝업에는 클릭 통과가 적용되지 않습니다."));
+        var clickOptions = new WrapPanel();
+        clickOptions.Children.Add(Check("팝업 클릭 시 Codex 데스크톱 창 열기", _manager.Configuration.Global.BringCodexToFrontOnClick, v => _manager.Configuration.Global.BringCodexToFrontOnClick = v));
+        clickOptions.Children.Add(Button("Codex 창 열기 테스트", () =>
+        {
+            _feedback.Text = CodexDesktopActivator.TryActivate() switch
+            {
+                DesktopActivationResult.Activated => "Codex 데스크톱 창을 앞으로 가져왔습니다.",
+                DesktopActivationResult.AttentionRequested => "Windows가 창 전환을 제한했습니다. 작업 표시줄의 Codex 아이콘을 클릭하세요.",
+                _ => "Codex 데스크톱을 먼저 실행하세요. 실제 알림 클릭 시에는 Mascot 작업 창을 대신 엽니다."
+            };
+        }));
+        content.Children.Add(clickOptions);
+        content.Children.Add(Text("실행 중인 Codex 창을 엽니다. 최소화된 창은 복원하며, 여러 창이면 가장 앞쪽 Codex 창을 선택합니다. ×는 알림만 닫습니다."));
         content.Children.Add(SliderRow("전체 볼륨", 0, 1, _manager.Configuration.Global.MasterVolume, v => _manager.Configuration.Global.MasterVolume = v));
         content.Children.Add(SliderRow("캐릭터 크기", .4, 3, _manager.Configuration.Global.Scale, v => _manager.Configuration.Global.Scale = v));
         var positions = new WrapPanel();
@@ -139,7 +155,11 @@ public partial class SettingsWindow : Window
         soundRow.Children.Add(Button("이미지 + 소리", () => Preview(true)));
         _editor.Children.Add(soundRow); _editor.Children.Add(soundPath);
         var values = new WrapPanel();
-        values.Children.Add(Number("표시 시간 ms (0=계속)", cfg.ShowDurationMs, 0, 600000, v => cfg.ShowDurationMs = v));
+        var duration = Number("표시 시간 ms (0=계속)", cfg.ShowDurationMs, 0, 600000, v => cfg.ShowDurationMs = v);
+        var held = _state == MascotState.Completed && _manager.Configuration.Global.KeepCompletedVisibleUntilClick;
+        duration.IsEnabled = !held;
+        if (held) _editor.Children.Add(Text("완료 팝업 유지가 켜져 있어 표시 시간은 적용되지 않습니다. 끄면 아래 시간으로 자동 닫힙니다."));
+        values.Children.Add(duration);
         values.Children.Add(Check("애니메이션 반복", cfg.Loop, v => cfg.Loop = v));
         values.Children.Add(Number("스프라이트 가로 칸", cfg.SpriteColumns, 1, 32, v => { cfg.SpriteColumns = v; UpdatePreview(); }));
         values.Children.Add(Number("세로 칸", cfg.SpriteRows, 1, 32, v => { cfg.SpriteRows = v; UpdatePreview(); }));
@@ -201,6 +221,7 @@ public partial class SettingsWindow : Window
     }
     private void StopTests()
     { _testGeneration++; _tests?.Cancel(); _tests = null; _overlay.PlacementMode = false; _overlay.HideMascot(); _sound.Stop(); }
+    public void StopPreview() => StopTests();
     private void SetStartup(bool enabled)
     {
         using var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");

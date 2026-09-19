@@ -41,6 +41,8 @@ public sealed class GlobalConfiguration
     public string Position { get; set; } = "bottom-right";
     public bool AlwaysOnTop { get; set; } = true;
     public bool ClickThrough { get; set; } = false;
+    public bool KeepCompletedVisibleUntilClick { get; set; } = true;
+    public bool BringCodexToFrontOnClick { get; set; } = true;
     public bool SoundEnabled { get; set; } = true;
     public double MasterVolume { get; set; } = 0.8;
     public string? MonitorDevice { get; set; }

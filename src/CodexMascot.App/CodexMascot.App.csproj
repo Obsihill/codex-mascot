@@ -9,9 +9,10 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="CodexMascot.App.Tests" />
     <ProjectReference Include="..\CodexMascot.Core\CodexMascot.Core.csproj" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     <Content Include="..\..\assets\**\*" Link="assets\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

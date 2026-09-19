@@ -19,7 +19,7 @@ internal static class PackageDiagnostic
         monitor.Poll();
         var result = new
         {
-            version = "0.2.0", runtime = Environment.Version.ToString(), images,
+            version = "0.2.1", runtime = Environment.Version.ToString(), images,
             soundFiles = Directory.GetFiles(AppPaths.SoundsDirectory, "*.wav").Length,
             relayIncluded = File.Exists(Path.Combine(AppContext.BaseDirectory, "integration", "Send-MascotEvent.ps1")),
             health, state = aggregator.State.ToString(), runningJobs = aggregator.Jobs.Count(j => j.State == MascotState.Running)

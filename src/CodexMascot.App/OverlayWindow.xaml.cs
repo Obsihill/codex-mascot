@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using CodexMascot.Core;
@@ -14,14 +16,20 @@ public partial class OverlayWindow : Window
     private GlobalConfiguration _global = new();
     private CancellationTokenSource? _display;
     private int _frame, _generation;
-    private bool _loop, _dragged, _closed;
+    private bool _loop, _dragged, _closed, _pressed, _hiding;
+    private bool _keepCompletedVisible = true;
+    private MascotState _state;
+    private StateConfiguration? _stateConfiguration;
     private Point _press;
     public event EventHandler? Clicked;
     public event EventHandler? Dismissed;
     public event EventHandler? PositionSaved;
     public string? LastImageError { get; private set; }
+    internal MascotState DisplayedState => _state;
+    internal bool IsPresenting => IsVisible && !_hiding;
     public bool PlacementMode { get; set; }
-    private bool ClickThrough => _global.ClickThrough && !PlacementMode;
+    private bool HoldUntilClick => _state == MascotState.Completed && _global.KeepCompletedVisibleUntilClick;
+    private bool ClickThrough => _global.ClickThrough && !PlacementMode && !HoldUntilClick;
     public OverlayWindow()
     {
         InitializeComponent();
@@ -35,15 +43,15 @@ public partial class OverlayWindow : Window
         };
         MouseLeftButtonDown += (_, e) =>
         {
-            if (ClickThrough || e.OriginalSource is System.Windows.Controls.Button) return;
-            _press = e.GetPosition(this); _dragged = false; CaptureMouse();
+            if (ClickThrough || IsButton(e.OriginalSource)) return;
+            _press = e.GetPosition(this); _dragged = false; _pressed = true; CaptureMouse();
         };
         MouseMove += (_, e) =>
         {
-            if (!IsMouseCaptured || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) return;
+            if (!_pressed || !IsMouseCaptured || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) return;
             var p = e.GetPosition(this);
             if (Math.Abs(p.X - _press.X) + Math.Abs(p.Y - _press.Y) < 8) return;
-            _dragged = true; ReleaseMouseCapture();
+            _dragged = true; _pressed = false; ReleaseMouseCapture();
             try { DragMove(); } catch (InvalidOperationException) { }
             var handle = new WindowInteropHelper(this).Handle;
             GetWindowRect(handle, out var rect);
@@ -51,21 +59,39 @@ public partial class OverlayWindow : Window
             _global.MonitorDevice = Forms.Screen.FromHandle(handle).DeviceName;
             PositionSaved?.Invoke(this, EventArgs.Empty);
         };
-        MouseLeftButtonUp += (_, _) =>
+        MouseLeftButtonUp += (_, e) =>
         {
+            var clicked = _pressed && !_dragged && !ClickThrough && !PlacementMode && !IsButton(e.OriginalSource);
+            _pressed = false;
             if (IsMouseCaptured) ReleaseMouseCapture();
-            if (!_dragged && !ClickThrough && !PlacementMode) Clicked?.Invoke(this, EventArgs.Empty);
             _dragged = false;
+            if (clicked) { HideMascot(); Clicked?.Invoke(this, EventArgs.Empty); }
         };
         Closed += (_, _) => { _closed = true; _timer.Stop(); _display?.Cancel(); _display?.Dispose(); };
     }
     public void ApplyGlobal(GlobalConfiguration config)
     {
+        var lifetimeChanged = _keepCompletedVisible != config.KeepCompletedVisibleUntilClick;
+        _keepCompletedVisible = config.KeepCompletedVisibleUntilClick;
         _global = config;
         Width = 260 * Math.Clamp(config.Scale, .4, 3);
         Height = 280 * Math.Clamp(config.Scale, .4, 3);
         Topmost = config.AlwaysOnTop;
         if (IsVisible) { PositionWindow(); ApplyStyles(); }
+        if (IsVisible && lifetimeChanged && _state == MascotState.Completed)
+        {
+            _hiding = false; Fade(1, 150); ScheduleAutoHide();
+        }
+    }
+    private static bool IsButton(object source)
+    {
+        var current = source as DependencyObject;
+        while (current is not null)
+        {
+            if (current is ButtonBase) return true;
+            current = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current);
+        }
+        return false;
     }
     public string DescribePosition()
     {
@@ -75,7 +101,7 @@ public partial class OverlayWindow : Window
     public void ShowState(MascotState state, StateConfiguration config, string? imagePath)
     {
         if (_closed) return;
-        _display?.Cancel(); _display?.Dispose(); _display = new();
+        _state = state; _stateConfiguration = config; _hiding = false;
         _timer.Stop(); _frames = Array.Empty<MascotFrame>(); _frame = 0; _loop = config.Loop;
         LastImageError = null;
         try
@@ -95,7 +121,13 @@ public partial class OverlayWindow : Window
         }
         if (!IsVisible) { Opacity = 0; Show(); }
         PositionWindow(); ApplyStyles(); Fade(1, 150);
-        if (config.ShowDurationMs > 0) _ = HideLater(Math.Clamp(config.ShowDurationMs, 200, 600000), _display.Token);
+        ScheduleAutoHide();
+    }
+    private void ScheduleAutoHide()
+    {
+        _display?.Cancel(); _display?.Dispose(); _display = new();
+        if (!_hiding && !HoldUntilClick && _stateConfiguration?.ShowDurationMs > 0)
+            _ = HideLater(Math.Clamp(_stateConfiguration.ShowDurationMs, 200, 600000), _display.Token);
     }
     private async Task HideLater(int ms, CancellationToken ct)
     {
@@ -105,7 +137,7 @@ public partial class OverlayWindow : Window
     public void HideMascot()
     {
         if (_closed) return;
-        _display?.Cancel(); Fade(0, 250);
+        _hiding = true; _display?.Cancel(); Fade(0, 250);
     }
     private void Fade(double opacity, int ms)
     {

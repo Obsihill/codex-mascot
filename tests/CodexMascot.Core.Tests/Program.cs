@@ -10,6 +10,30 @@ internal static class Program
         => new(kind, "test", job, turn, Status: status, RequestId: request, OccurredAt: Epoch.AddSeconds(t));
     private static void Equal<T>(T expected, T actual, string label)
     { _assertions++; if (!EqualityComparer<T>.Default.Equals(expected, actual)) throw new Exception(label + ": expected " + expected + ", actual " + actual); }
+    private static void TestCompletionPopup()
+    {
+        var jobs = new StatusAggregator();
+        var popup = new CompletionPopupPolicy();
+        jobs.Apply(E(CodexEventKind.TurnStarted));
+        popup.Observe(jobs.Apply(E(CodexEventKind.TurnCompleted, t: 1)).Jobs);
+        popup.Observe(jobs.Apply(E(CodexEventKind.TurnStarted, turn: "2", t: 2)).Jobs);
+        Equal(MascotState.Completed, popup.Resolve(jobs.State, true), "held completion survives next turn on same task");
+        Equal(MascotState.Running, popup.Resolve(jobs.State, false), "disabled hold follows live status");
+        Equal(MascotState.NeedsAttention, popup.Resolve(MascotState.NeedsAttention, true), "approval overrides held completion");
+        Equal(MascotState.Failed, popup.Resolve(MascotState.Failed, true), "failure overrides held completion");
+        Equal(MascotState.Completed, popup.Resolve(MascotState.Idle, true), "held completion reappears after higher-priority state resolves");
+        popup.Observe(jobs.Apply(E(CodexEventKind.TurnCompleted, job: "b", t: 3)).Jobs);
+        popup.Acknowledge("a");
+        Equal(MascotState.Completed, popup.Resolve(MascotState.Idle, true), "acknowledging one task keeps another completion");
+        popup.Acknowledge("b");
+        Equal(MascotState.Running, popup.Resolve(MascotState.Running, true), "acknowledging all completed tasks releases popup");
+        popup.Observe(jobs.Jobs);
+        popup.Acknowledge();
+        Equal(MascotState.Idle, popup.Resolve(MascotState.Idle, true), "global acknowledgement clears retained completions");
+        jobs = new StatusAggregator();
+        popup.Observe(jobs.Apply(E(CodexEventKind.TurnCompleted) with { IsReplay = true }).Jobs);
+        Equal(MascotState.Idle, popup.Resolve(jobs.State, true), "historical completions do not latch a popup");
+    }
     private static void Main(string[] args)
     {
         if (args.FirstOrDefault() == "--probe")
@@ -25,6 +49,7 @@ internal static class Program
             if (args.Length > 2) File.WriteAllText(args[2], report);
             return;
         }
+        TestCompletionPopup();
         var a = new StatusAggregator();
         Equal(MascotState.Running, a.Apply(E(CodexEventKind.TurnStarted)).State, "start");
         Equal(MascotState.Completed, a.Apply(E(CodexEventKind.TurnCompleted, t: 1, status: "completed")).State, "complete");

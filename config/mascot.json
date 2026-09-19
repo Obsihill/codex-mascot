@@ -6,6 +6,8 @@
     "Position": "bottom-right",
     "AlwaysOnTop": true,
     "ClickThrough": false,
+    "KeepCompletedVisibleUntilClick": true,
+    "BringCodexToFrontOnClick": true,
     "SoundEnabled": true,
     "MasterVolume": 0.8
   },

@@ -1,5 +1,16 @@
 # 검증 기록
 
+## 0.2.1 추가 기능 검증
+
+- Release 빌드: 경고 0, 오류 0.
+- Core 52개, App 42개 assertion 통과.
+- 완료 팝업의 시간 제한 해제, 옵션 변경 시 타이머 취소/재설정, 클릭 통과 예외, 클릭/× 닫기 분리, 다른 상태의 자동 닫힘을 실제 WPF 창과 메시지 루프로 확인함.
+- 같은 작업의 다음 turn 시작 뒤에도 미확인 완료 유지, 승인/실패 우선순위, 작업별/전체 확인, 초기 이력 제외를 검증함.
+- 새 옵션의 기존 JSON 기본값, 저장/재로드, 테마 내보내기/가져오기 확인.
+- 최소화 복원 후 전환, 최대화 크기 유지, 창 없음, 전환 거부 시 작업 표시줄 알림은 주입한 Windows 호출 대역으로 검증함.
+- 실제 실행 중인 Store Codex (`OpenAI.Codex_…/app/ChatGPT.exe`)의 창 탐색 성공. 일반 ChatGPT·Codex CLI·Mascot를 대상에서 제외함.
+- 실제 사용자 클릭 뒤 다른 프로세스의 포커스 전환은 설정의 **Codex 창 열기 테스트**로 확인할 수 있음. Windows 포커스 정책에 따른 전환 성공은 모든 환경에서 보장하지 않음. 구현은 [SetForegroundWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow)와 [ShowWindowAsync](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindowasync)를 사용함.
+
 2026-09-20, Windows x64 / .NET 8 WPF.
 
 - 안정 .NET SDK 9.0.306 Release 빌드: 경고 0, 오류 0.

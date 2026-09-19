@@ -1,15 +1,15 @@
-# Codex Mascot for Windows — 0.2
+# Codex Mascot for Windows — 0.2.1
 
 Windows 10/11 x64용 캐릭터 작업 알림 앱입니다. Codex가 이미 실행 중인 프로젝트 작업을 로컬 기록에서 읽습니다. 새 Codex 작업을 시작할 필요가 없습니다.
 
 ## 오픈소스 저장소
 
-이 프로젝트는 MIT License로 공개되어 있습니다. `Release/` 폴더에는 .NET 런타임을 포함한 바로 실행 가능한 Windows x64 빌드가 들어 있습니다. 소스 변경 후에는 `.github/workflows/build-windows.yml`이 테스트와 self-contained Windows 빌드를 자동으로 수행합니다.
+이 프로젝트는 MIT License로 공개되어 있습니다. 바로 사용하려면 [최신 릴리스](https://github.com/Obsihill/codex-mascot/releases/latest)의 Windows x64 ZIP을 다운로드하세요. .NET 런타임이 포함되어 있습니다. 저장소의 `Release/` 폴더는 이전 0.2.0 배포본이며 최신 실행 파일은 릴리스에서 제공합니다. 소스 변경 후에는 `.github/workflows/build-windows.yml`이 테스트와 self-contained Windows 빌드를 자동으로 수행합니다.
 
 ```powershell
-git clone <repository-url>
-cd CodexMascot
-Start-Process .\Release\CodexMascot.App.exe
+git clone https://github.com/Obsihill/codex-mascot.git
+cd codex-mascot
+dotnet run --project src/CodexMascot.App
 ```
 
 GitHub Actions의 빌드 결과는 workflow의 Artifacts에서 `CodexMascot-Windows-x64`로 내려받을 수 있습니다. 외부 라이브러리의 조건은 `THIRD-PARTY-NOTICES.txt`를 확인하세요.
@@ -60,6 +60,14 @@ Hook 설정 해제는 Mascot가 추가한 항목만 제거합니다.
 ## 캐릭터·사운드·위치
 
 기본 위치는 **기본 모니터 오른쪽 아래**입니다. 설정에서 모니터와 모서리/중앙을 선택하거나 **위치 표시 · 드래그**로 직접 배치할 수 있습니다. 위치는 자동 저장되고 모니터가 없어지면 기본 모니터로 복구합니다.
+
+**완료 팝업을 클릭할 때까지 유지**는 기본으로 켜져 있습니다. 켜면 완료 알림의 자동 닫힘 타이머를 사용하지 않으며 캐릭터 또는 ×를 눌러 닫습니다. 같은 작업에서 다음 응답이 시작되어도 아직 클릭하지 않은 완료 알림을 유지합니다. 끄면 `응답 완료`의 표시 시간(기본 4초)이 적용됩니다. 유지 중인 완료 팝업은 클릭 통과를 설정해도 클릭할 수 있습니다. 승인·실패는 우선 표시하고 해소되면 미확인 완료 알림을 다시 표시합니다. 결과 확인 버튼과 감시 재시작/정지로도 알림을 해제할 수 있습니다.
+
+**팝업 클릭 시 Codex 데스크톱 창 열기**도 기본으로 켜져 있습니다. 실행 중인 Codex 창을 앞으로 가져오고 최소화 상태는 복원합니다. 여러 창이면 화면에서 가장 앞쪽인 Codex 창을 선택하며, 특정 작업 탭까지 전환하지는 않습니다. Codex 창을 찾지 못하거나 옵션을 끄면 Mascot 작업 창을 엽니다. Windows가 전환을 제한하면 Codex의 작업 표시줄 아이콘으로 알립니다. ×와 드래그는 Codex 창을 열지 않습니다.
+
+설정의 **이미지만 테스트**로 완료 팝업 유지를 확인하고 **Codex 창 열기 테스트**로 창 전환을 확인할 수 있습니다. 테스트 팝업을 클릭하거나 닫아도 실제 작업 결과를 확인 처리하지 않습니다. 모든 상태 테스트는 각 상태를 2초씩 보여준 뒤 종료합니다.
+
+기존 설정에 새 항목이 없으면 기본값으로 적용됩니다. JSON에서는 `global.keepCompletedVisibleUntilClick`, `global.bringCodexToFrontOnClick`으로 변경할 수 있습니다.
 
 - GIF, PNG, WebP (투명 배경 지원). GIF/WebP 애니메이션은 프레임별 시간을 반영합니다.
 - 정적 이미지의 스프라이트 시트: 가로/세로 칸과 칸당 시간을 설정합니다. 기본 1×1.

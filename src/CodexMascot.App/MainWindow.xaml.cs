@@ -11,6 +11,7 @@ namespace CodexMascot.App;
 public partial class MainWindow : Window
 {
     private readonly StatusAggregator _aggregator = new();
+    private readonly CompletionPopupPolicy _completionPopup = new();
     private readonly CustomizationManager _customization = new();
     private readonly OverlayWindow _overlay = new();
     private readonly SoundPlayerService _sound = new();
@@ -43,8 +44,12 @@ public partial class MainWindow : Window
         ProjectPathComboBox.Text = config.Monitor.RecentProjects.FirstOrDefault() ?? Environment.CurrentDirectory;
         _server.EventReceived += OwnEvent;
         _cli.EventReceived += OwnEvent;
-        _overlay.Clicked += (_, _) => { ShowMain(); Acknowledge(null); };
-        _overlay.Dismissed += (_, _) => { _aggregator.Acknowledge(); RefreshJobs(); };
+        _overlay.Clicked += Overlay_OnClicked;
+        _overlay.Dismissed += (_, _) =>
+        {
+            if (_settings is not null) { _settings.StopPreview(); return; }
+            _aggregator.Acknowledge(); _completionPopup.Acknowledge(); RefreshJobs(); _sound.Stop();
+        };
         _server.GetUserInput = async parameters => await Dispatcher.InvokeAsync(() => InputRequestWindow.Ask(this, parameters));
         _overlay.PositionSaved += (_, _) => { _customization.Save(); UpdatePositionText(); };
         _sound.Feedback += (_, text) => Log(text);
@@ -77,6 +82,8 @@ public partial class MainWindow : Window
             _customization.Configuration.Monitor.ProjectFilter = _filter;
             _customization.Save();
             _aggregator.Clear();
+            _completionPopup.Acknowledge();
+            _overlay.HideMascot();
             RefreshJobs();
             var monitor = new DesktopSessionMonitor(home, HookIntegration.EventDirectory);
             monitor.EventReceived += (_, e) => Dispatch(() =>
@@ -116,7 +123,7 @@ public partial class MainWindow : Window
     }
     private async void Monitor_OnClick(object sender, RoutedEventArgs e) => await StartMonitoring();
     private async void PauseMonitor_OnClick(object sender, RoutedEventArgs e)
-        { await StopMonitoring(); _aggregator.Clear(); RefreshJobs(); _overlay.HideMascot(); ConnectionTextBlock.Text = "감시 정지됨 · Codex 작업은 계속됩니다."; }
+        { await StopMonitoring(); _aggregator.Clear(); _completionPopup.Acknowledge(); RefreshJobs(); _overlay.HideMascot(); ConnectionTextBlock.Text = "감시 정지됨 · Codex 작업은 계속됩니다."; }
     private void BrowseHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(CodexHomeTextBox, "Codex 데이터 폴더 (.codex)를 선택하세요.");
     private void BrowseFilter_OnClick(object sender, RoutedEventArgs e) => BrowseInto(FilterTextBox, "감시할 프로젝트 폴더를 선택하세요.");
     private void ClearFilter_OnClick(object sender, RoutedEventArgs e) { FilterTextBox.Clear(); _ = StartMonitoring(); }
@@ -157,6 +164,7 @@ public partial class MainWindow : Window
     private void HandleEvent(CodexEvent e)
     {
         var result = _aggregator.Apply(e);
+        _completionPopup.Observe(result.Jobs);
         RefreshJobs();
         if (!e.IsReplay && e.Kind != CodexEventKind.ItemCompleted)
         {
@@ -167,6 +175,11 @@ public partial class MainWindow : Window
     }
     private void Present(MascotState state, bool sound)
     {
+        var resolved = _completionPopup.Resolve(state, _customization.Configuration.Global.KeepCompletedVisibleUntilClick);
+        if (resolved == MascotState.Completed && _customization.Configuration.Global.KeepCompletedVisibleUntilClick &&
+            _overlay.IsPresenting && _overlay.DisplayedState == MascotState.Completed) return;
+        sound &= resolved == state;
+        state = resolved;
         if (state is MascotState.Disconnected or MascotState.Connecting ||
             state == MascotState.Idle && !_customization.Configuration.Global.ShowIdle)
         { _overlay.HideMascot(); return; }
@@ -195,7 +208,22 @@ public partial class MainWindow : Window
         MascotState.Connecting => "연결 중", _ => "대기 중"
     };
     private void Acknowledge(string? id)
-    { _aggregator.Acknowledge(id); RefreshJobs(); Present(_aggregator.State, false); }
+    { _aggregator.Acknowledge(id); _completionPopup.Acknowledge(id); RefreshJobs(); Present(_aggregator.State, false); }
+    private void Overlay_OnClicked(object? sender, EventArgs e)
+    {
+        // Preview clicks must not acknowledge real tasks or leave the test loop running.
+        if (_settings is not null) { _settings.StopPreview(); return; }
+        _aggregator.Acknowledge(); _completionPopup.Acknowledge(); RefreshJobs(); _sound.Stop();
+        if (!_customization.Configuration.Global.BringCodexToFrontOnClick) { ShowMain(); return; }
+        var result = CodexDesktopActivator.TryActivate();
+        if (result == DesktopActivationResult.NotFound)
+        {
+            ShowMain();
+            Log("실행 중인 Codex 데스크톱 창을 찾지 못해 Mascot 작업 창을 열었습니다.");
+        }
+        else if (result == DesktopActivationResult.AttentionRequested)
+            Log("Windows가 창 전환을 허용하지 않아 Codex 작업 표시줄 아이콘으로 알렸습니다.");
+    }
     private void Acknowledge_OnClick(object sender, RoutedEventArgs e) { if (JobsListView.SelectedItem is JobRow j) Acknowledge(j.Id); }
     private void AcknowledgeAll_OnClick(object sender, RoutedEventArgs e) => Acknowledge(null);
     private void CopyId_OnClick(object sender, RoutedEventArgs e)

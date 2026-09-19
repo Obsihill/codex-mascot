@@ -18,10 +18,13 @@ internal static class Program
     private static void Main(string[] args)
     {
         if (args.FirstOrDefault() == "app-server") { FakeServer(); return; }
+        if (args.FirstOrDefault() == "--probe-desktop")
+        { Console.WriteLine("Codex desktop window found: " + (CodexDesktopActivator.FindWindow() != IntPtr.Zero)); return; }
         var dir = Path.Combine(Path.GetTempPath(), "mascot-app-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         try
         {
+            PopupFeatureTests.Run(Check);
             using var image = new Image<Bgra32>(16, 16, new Bgra32(255, 0, 0));
             image.Frames.RootFrame.Metadata.GetGifMetadata().FrameDelay = 12;
             using var second = new Image<Bgra32>(16, 16, new Bgra32(0, 255, 0));
@@ -89,18 +92,22 @@ internal static class Program
             try
             {
                 manager.Configuration.For(MascotState.Completed).Image = manager.ImportAsset(png, false);
+                manager.Configuration.Global.KeepCompletedVisibleUntilClick = false;
+                manager.Configuration.Global.BringCodexToFrontOnClick = false;
                 manager.Save(); var reloaded = new CustomizationManager();
                 Check(reloaded.ResolveImage(MascotState.Completed) is not null, "asset copy/save/reload");
+                Check(!reloaded.Configuration.Global.KeepCompletedVisibleUntilClick && !reloaded.Configuration.Global.BringCodexToFrontOnClick, "popup preferences persist in config file");
                 var zip = Path.Combine(dir, "theme.zip"); manager.Export(zip);
                 reloaded.ImportTheme(zip);
                 Check(reloaded.ResolveImage(MascotState.Completed) is not null, "theme export/import");
+                Check(!reloaded.Configuration.Global.KeepCompletedVisibleUntilClick && !reloaded.Configuration.Global.BringCodexToFrontOnClick, "theme retains popup preferences");
                 File.WriteAllText(AppPaths.ConfigFile, "{bad");
                 var recovered = new CustomizationManager();
                 Check(recovered.LoadWarning is not null && File.Exists(AppPaths.ConfigFile), "corrupt JSON recovery");
             }
             finally { File.WriteAllText(AppPaths.ConfigFile, original); }
             TestTransport(dir).GetAwaiter().GetResult();
-            Console.WriteLine("PASS: " + _count + " app assertions (GIF/WebP/sprites, themes, hook merge/relay, RPC approvals/EOF).");
+            Console.WriteLine("PASS: " + _count + " app assertions (popup lifetimes/clicks, desktop activation, GIF/WebP/sprites, themes, hook merge/relay, RPC approvals/EOF).");
         }
         finally { Directory.Delete(dir, true); }
     }
