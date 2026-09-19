@@ -46,7 +46,6 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item README.md, VALIDATION.md, THIRD-PARTY-NOTICES.txt, LICENSE -Destination artifact/CodexMascot
-          Copy-Item -Recurse assets, integration -Destination artifact/CodexMascot
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
