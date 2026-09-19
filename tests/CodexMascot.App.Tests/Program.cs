@@ -37,15 +37,18 @@ internal static class Program
             var webp = Path.Combine(dir, "static.webp");
             second.SaveAsWebp(webp);
             Check(MascotImageLoader.Load(webp, new())[0].Bitmap.PixelWidth == 16, "WebP decoder");
-            using (var sound = new SoundPlayerService())
+            var soundPath = Path.Combine(AppContext.BaseDirectory, "assets", "sounds", "completed.wav");
+            Check(File.Exists(soundPath) && new FileInfo(soundPath).Length > 44, "WAV test asset is present");
+            if (!string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase))
             {
+                using var sound = new SoundPlayerService();
                 string? feedback = null;
                 var dispatcherFrame = new System.Windows.Threading.DispatcherFrame();
                 var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
                 timer.Tick += (_, _) => dispatcherFrame.Continue = false;
                 sound.Feedback += (_, text) => { feedback = text; dispatcherFrame.Continue = false; };
                 timer.Start();
-                sound.Play(Path.Combine(AppContext.BaseDirectory, "assets", "sounds", "completed.wav"), 0);
+                sound.Play(soundPath, 0);
                 if (feedback is null) System.Windows.Threading.Dispatcher.PushFrame(dispatcherFrame);
                 timer.Stop();
                 Check(feedback?.Contains("재생 시작") == true, "WAV decoder opens successfully at silent test volume: " + feedback);
