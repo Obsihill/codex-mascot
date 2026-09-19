@@ -1,0 +1,57 @@
+name: Build Windows
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore CodexMascot.sln
+
+      - name: Build
+        run: dotnet build CodexMascot.sln --configuration Release --no-restore
+
+      - name: Core tests
+        run: dotnet run --project tests/CodexMascot.Core.Tests --configuration Release --no-build
+
+      - name: App tests
+        run: dotnet run --project tests/CodexMascot.App.Tests --configuration Release --no-build
+
+      - name: Publish self-contained Windows x64
+        run: >
+          dotnet publish src/CodexMascot.App
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output artifact/CodexMascot
+
+      - name: Add source documentation and license
+        shell: pwsh
+        run: |
+          Copy-Item README.md, VALIDATION.md, THIRD-PARTY-NOTICES.txt, LICENSE -Destination artifact/CodexMascot
+          Copy-Item -Recurse assets, integration -Destination artifact/CodexMascot
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexMascot-Windows-x64
+          path: artifact/CodexMascot
+          if-no-files-found: error
+          retention-days: 30

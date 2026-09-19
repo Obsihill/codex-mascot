@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "profile": "default",
+  "global": {
+    "scale": 1,
+    "position": "bottom-right",
+    "alwaysOnTop": true,
+    "clickThrough": true,
+    "soundEnabled": true,
+    "masterVolume": 0.8,
+    "monitorDevice": null,
+    "customLeft": null,
+    "customTop": null,
+    "showIdle": true,
+    "startWithWindows": false
+  },
+  "monitor": {
+    "codexHome": "C:\\Users\\wonji\\.codex",
+    "projectFilter": "",
+    "autoStart": true,
+    "codexExecutable": null,
+    "recentProjects": []
+  },
+  "states": {
+    "idle": {
+      "image": "assets/images/idle.png",
+      "sound": null,
+      "showDurationMs": 0,
+      "loop": true,
+      "volume": 0.8,
+      "spriteColumns": 1,
+      "spriteRows": 1,
+      "frameDurationMs": 100
+    },
+    "running": {
+      "image": "assets/images/running.png",
+      "sound": null,
+      "showDurationMs": 1200,
+      "loop": false,
+      "volume": 0.8,
+      "spriteColumns": 1,
+      "spriteRows": 1,
+      "frameDurationMs": 100
+    },
+    "needsAttention": {
+      "image": "assets/images/attention.png",
+      "sound": "assets/sounds/attention.wav",
+      "showDurationMs": 0,
+      "loop": true,
+      "volume": 0.8,
+      "spriteColumns": 1,
+      "spriteRows": 1,
+      "frameDurationMs": 100
+    },
+    "completed": {
+      "image": "assets/images/4751ef98-d52c-4748-b4a9-3f2b5666a562-eae8d455.png",
+      "sound": "assets/sounds/completed.wav",
+      "showDurationMs": 4000,
+      "loop": false,
+      "volume": 0.8,
+      "spriteColumns": 1,
+      "spriteRows": 1,
+      "frameDurationMs": 100
+    },
+    "failed": {
+      "image": "assets/images/failed.png",
+      "sound": "assets/sounds/failed.wav",
+      "showDurationMs": 6000,
+      "loop": false,
+      "volume": 1,
+      "spriteColumns": 1,
+      "spriteRows": 1,
+      "frameDurationMs": 100
+    },
+    "interrupted": {
+      "image": "assets/images/interrupted.png",
+      "sound": null,
+      "showDurationMs": 3000,
+      "loop": false,
+      "volume": 0.8,
+      "spriteColumns": 1,
+      "spriteRows": 1,
+      "frameDurationMs": 100
+    }
+  }
+}

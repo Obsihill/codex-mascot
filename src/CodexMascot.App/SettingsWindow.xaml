@@ -1,0 +1,13 @@
+<Window x:Class="CodexMascot.App.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Codex Mascot 설정"
+        Width="850"
+        Height="650"
+        MinWidth="720"
+        MinHeight="520"
+        Background="#FF111925"
+        Foreground="{StaticResource TextBrush}"
+        WindowStartupLocation="CenterOwner">
+    <Grid x:Name="Root" Margin="18" />
+</Window>

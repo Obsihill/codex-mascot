@@ -1,0 +1,28 @@
+# Build output
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Local runtime data
+work/
+logs/
+*.log
+config/connection-status.json
+config/events.jsonl
+config/*.bak
+Release/config/connection-status.json
+Release/config/events.jsonl
+Release/config/*.bak
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Archives generated for delivery
+*.zip
