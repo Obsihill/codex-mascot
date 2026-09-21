@@ -22,13 +22,13 @@ public partial class OverlayWindow : Window
     private StateConfiguration? _stateConfiguration;
     private Point _press;
     public event EventHandler? Clicked;
-    public event EventHandler? Dismissed;
     public event EventHandler? PositionSaved;
     public string? LastImageError { get; private set; }
     internal MascotState DisplayedState => _state;
     internal bool IsPresenting => IsVisible && !_hiding;
     public bool PlacementMode { get; set; }
-    private bool HoldUntilClick => _state == MascotState.Completed && _global.KeepCompletedVisibleUntilClick;
+    private bool HoldUntilClick => _state == MascotState.NeedsAttention ||
+        (_state == MascotState.Completed && _global.KeepCompletedVisibleUntilClick);
     private bool ClickThrough => _global.ClickThrough && !PlacementMode && !HoldUntilClick;
     public OverlayWindow()
     {
@@ -178,7 +178,6 @@ public partial class OverlayWindow : Window
         var style = GetWindowLong(handle, -20) | 0x08000000 | 0x80;
         SetWindowLong(handle, -20, ClickThrough ? style | 0x20 : style & ~0x20);
     }
-    private void Dismiss_OnClick(object sender, RoutedEventArgs e) { e.Handled = true; Dismissed?.Invoke(this, EventArgs.Empty); HideMascot(); }
     [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] private struct NativePoint { public int X, Y; }
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);

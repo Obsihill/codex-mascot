@@ -39,14 +39,16 @@ internal static class Program
         if (args.FirstOrDefault() == "--probe")
         {
             var probeAggregator = new StatusAggregator();
-            var m = new DesktopSessionMonitor(args[1], Path.Combine(Path.GetTempPath(), "mascot-nonexistent-hook-probe"));
+            // --probe <home> [reportPath] [--claude]
+            var adapter = args.Contains("--claude") ? AgentAdapters.Claude : AgentAdapters.Codex;
+            var m = new DesktopSessionMonitor(args[1], Path.Combine(Path.GetTempPath(), "mascot-nonexistent-hook-probe"), adapter);
             var live = 0;
             m.EventReceived += (_, e) => { probeAggregator.Apply(e); if (!e.IsReplay) live++; };
             for (var i = 0; i < 6; i++) { m.Poll(); Thread.Sleep(650); }
             var report = JsonSerializer.Serialize(new { state = probeAggregator.State.ToString(), liveEvents = live,
                 jobs = probeAggregator.Jobs.Select(j => new { id = j.ThreadId, state = j.State.ToString(), cwd = j.ProjectPath, updated = j.LastUpdated }) }, new JsonSerializerOptions { WriteIndented = true });
             Console.WriteLine(report);
-            if (args.Length > 2) File.WriteAllText(args[2], report);
+            if (args.Length > 2 && !args[2].StartsWith("--", StringComparison.Ordinal)) File.WriteAllText(args[2], report);
             return;
         }
         TestCompletionPopup();
@@ -98,6 +100,48 @@ internal static class Program
         Equal("cli-id", cli.ThreadId, "CLI snake case");
         Equal("failed", CodexEventNormalizer.FromJsonLine("""{"type":"turn.failed","error":{"message":"auth failed"}}""", "source")!.Status, "CLI failed");
 
+        // Claude Code writes no lifecycle event, so the turn is inferred from prompt and stop reason.
+        var claudeHead = new[] { ClaudeQueue(), ClaudePrompt("p1") };
+        var claudeIdentity = ClaudeEventParser.ReadIdentity(claudeHead)!;
+        Equal("claude-session", claudeIdentity.Id, "claude session id from the first record");
+        Equal("C:/Project", claudeIdentity.Cwd, "claude cwd from a later record");
+        Equal(null, ClaudeEventParser.ReadIdentity(new[] { "{bad", """{"type":"user"}""" }), "claude file without a session id");
+        var claude = new TranscriptContext { Identity = claudeIdentity };
+        var claudeStart = ClaudeEventParser.ParseTranscript(claudeHead[1], claude)!;
+        Equal(CodexEventKind.TurnStarted, claudeStart.Kind, "claude human prompt starts a turn");
+        Equal("p1", claudeStart.TurnId, "claude turn id comes from promptId");
+        Equal("C:/Project", claudeStart.ProjectPath, "claude project path");
+        Equal(CodexEventKind.ItemCompleted, ClaudeEventParser.ParseTranscript(ClaudeAssistant("tool_use", "req-1"), claude)!.Kind, "claude tool step is progress");
+        Equal(null, ClaudeEventParser.ParseTranscript(ClaudeAssistant("tool_use", "req-1"), claude), "one response written as several records reports once");
+        Equal(CodexEventKind.ItemCompleted, ClaudeEventParser.ParseTranscript(ClaudeToolResult(), claude)!.Kind, "claude tool result is progress");
+        Equal(null, ClaudeEventParser.ParseTranscript(ClaudeSubagent(), claude), "claude subagent records excluded");
+        Equal(null, ClaudeEventParser.ParseTranscript("""{"type":"system","subtype":"stop_hook_summary"}""", claude), "claude system record ignored");
+        Equal(null, ClaudeEventParser.ParseTranscript("{bad", claude), "claude bad JSON");
+        Equal(CodexEventKind.ItemCompleted, ClaudeEventParser.ParseTranscript(ClaudeAssistant("max_tokens"), claude)!.Kind, "claude never guesses a result from max_tokens");
+        var claudeEnd = ClaudeEventParser.ParseTranscript(ClaudeAssistant("end_turn"), claude)!;
+        Equal(CodexEventKind.TurnCompleted, claudeEnd.Kind, "claude end_turn completes the turn");
+        Equal("completed", claudeEnd.Status, "claude completion status");
+        Equal("p1", claudeEnd.TurnId, "claude completion keeps the prompt turn id");
+        Equal(null, claude.CurrentTurn, "claude turn closes");
+        // Tool output that quotes the interrupt marker must not be read as an interruption.
+        Equal(CodexEventKind.ItemCompleted, ClaudeEventParser.ParseTranscript(ClaudeQuotedMarker(true), claude)!.Kind, "grep output quoting the marker is not an interruption");
+        Equal(CodexEventKind.ItemCompleted, ClaudeEventParser.ParseTranscript(ClaudeQuotedMarker(false), claude)!.Kind, "the marker mid-text is not an interruption");
+        Equal("interrupted", ClaudeEventParser.ParseTranscript(ClaudeInterrupt(), claude)!.Status, "claude interruption from the transcript");
+        var claudeHook = ClaudeEventParser.ParseHook("""{"hook_event_name":"Notification","session_id":"cs","cwd":"C:/Project","tool_name":"Bash"}""")!;
+        Equal(CodexEventKind.ApprovalRequired, claudeHook.Kind, "claude notification needs attention");
+        Equal(null, claudeHook.TurnId, "claude hooks carry no turn id");
+        Equal(CodexEventKind.UserInputRequired, ClaudeEventParser.ParseHook("""{"hook_event_name":"PreToolUse","session_id":"cs","tool_name":"AskUserQuestion"}""")!.Kind, "claude question tool");
+        Equal(null, ClaudeEventParser.ParseHook("""{"hook_event_name":"PreToolUse","session_id":"cs","tool_name":"Bash"}"""), "ordinary tool is not a question");
+        Equal(null, ClaudeEventParser.ParseHook("""{"hook_event_name":"SubagentStop","session_id":"cs"}"""), "subagent stop is not the user's result");
+        Equal(null, ClaudeEventParser.ParseHook("""{"hook_event_name":"Stop"}"""), "claude hook without a session is rejected");
+        Equal("completed", ClaudeEventParser.ParseHook("""{"hook_event_name":"Stop","session_id":"cs"}""")!.Status, "claude stop completes");
+        // Hooks stay supplementary: the record monitor supplies the turn, the hook the approval.
+        var claudeJobs = new StatusAggregator();
+        claudeJobs.Apply(claudeStart);
+        Equal(MascotState.NeedsAttention, claudeJobs.Apply(ClaudeEventParser.ParseHook("""{"hook_event_name":"Notification","session_id":"claude-session"}""")!).State, "claude notification raises attention");
+        Equal(MascotState.Running, claudeJobs.Apply(ClaudeEventParser.ParseHook("""{"hook_event_name":"PostToolUse","session_id":"claude-session","tool_name":"Bash"}""")!).State, "a tool that ran answers the prompt in front of it");
+        Equal(MascotState.Completed, claudeJobs.Apply(ClaudeEventParser.ParseHook("""{"hook_event_name":"Stop","session_id":"claude-session"}""")!).State, "claude stop hook completes the turn");
+
         var dir = Path.Combine(Path.GetTempPath(), "mascot-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         try
@@ -134,10 +178,64 @@ internal static class Program
             File.AppendAllText(log, "{bad}\n" + Line("task_started","next") + "\n");
             monitor.Poll();
             Equal(MascotState.Running, state.State, "recover malformed record");
+
+            var projects = Path.Combine(dir, "projects", "C--Project"); Directory.CreateDirectory(projects);
+            var claudeLog = Path.Combine(projects, "session.jsonl");
+            File.WriteAllText(claudeLog, ClaudeQueue() + "\n" + ClaudePrompt("old") + "\n" + ClaudeAssistant("end_turn") + "\n");
+            var claudeMonitor = new DesktopSessionMonitor(dir, Path.Combine(dir, "claude-hooks"), AgentAdapters.Claude);
+            var claudeState = new StatusAggregator();
+            var claudeEvents = new List<CodexEvent>();
+            claudeMonitor.EventReceived += (_, e) => { claudeEvents.Add(e); claudeState.Apply(e); };
+            claudeMonitor.Poll();
+            Equal(MascotState.Idle, claudeState.State, "claude bootstrap history");
+            Equal(true, claudeEvents.All(e => e.IsReplay), "claude bootstrap events silent");
+            File.AppendAllText(claudeLog, ClaudePrompt("new") + "\n");
+            claudeMonitor.Poll();
+            Equal(MascotState.Running, claudeState.State, "claude live prompt");
+            File.AppendAllText(claudeLog, ClaudeAssistant("tool_use") + "\n" + ClaudeSubagent() + "\n");
+            claudeMonitor.Poll();
+            Equal(MascotState.Running, claudeState.State, "claude tool step keeps running and ignores subagents");
+            File.AppendAllText(claudeLog, ClaudeAssistant("end_turn") + "\n");
+            claudeMonitor.Poll();
+            Equal(MascotState.Completed, claudeState.State, "claude live completion");
+            var claudeCount = claudeEvents.Count; claudeMonitor.Poll();
+            Equal(claudeCount, claudeEvents.Count, "no repeated claude polling events");
         }
         finally { Directory.Delete(dir, true); }
         Console.WriteLine("PASS: " + _assertions + " assertions (aggregation, duplicate/late events, hooks, JSONL, real monitor fixture).");
     }
     private static string Line(string type, string turn) => JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow,
         type = "event_msg", payload = new { type, turn_id = turn } });
+    private static string ClaudeQueue() => JsonSerializer.Serialize(new { type = "queue-operation", operation = "enqueue",
+        timestamp = DateTimeOffset.UtcNow, sessionId = "claude-session" });
+    private static string ClaudePrompt(string promptId) => JsonSerializer.Serialize(new { type = "user",
+        sessionId = "claude-session", cwd = "C:/Project", version = "2.1.275", promptId, uuid = promptId,
+        isSidechain = false, origin = new { kind = "human" }, message = new { role = "user", content = "fixture prompt" },
+        timestamp = DateTimeOffset.UtcNow });
+    private static string ClaudeAssistant(string stopReason, string? requestId = null) => JsonSerializer.Serialize(new { type = "assistant",
+        sessionId = "claude-session", cwd = "C:/Project", isSidechain = false, requestId,
+        message = new { role = "assistant", stop_reason = stopReason, content = new[] { new { type = "text", text = "ok" } } },
+        timestamp = DateTimeOffset.UtcNow });
+    private static string ClaudeToolResult() => JsonSerializer.Serialize(new { type = "user",
+        sessionId = "claude-session", cwd = "C:/Project", isSidechain = false, toolUseResult = new { ok = true },
+        message = new { role = "user", content = new[] { new { type = "tool_result", content = "done" } } },
+        timestamp = DateTimeOffset.UtcNow });
+    private static string ClaudeSubagent() => JsonSerializer.Serialize(new { type = "assistant",
+        sessionId = "claude-session", cwd = "C:/Project", isSidechain = true,
+        message = new { role = "assistant", stop_reason = "end_turn", content = new[] { new { type = "text", text = "sub" } } },
+        timestamp = DateTimeOffset.UtcNow });
+    // Left: a tool result whose output contains the marker. Right: a text block that mentions it mid-sentence.
+    private static string ClaudeQuotedMarker(bool asToolResult) => asToolResult
+        ? JsonSerializer.Serialize(new { type = "user", sessionId = "claude-session", cwd = "C:/Project",
+            isSidechain = false, toolUseResult = new { ok = true },
+            message = new { role = "user", content = new[] { new { type = "tool_result", content = "2 matches: [Request interrupted by user]" } } },
+            timestamp = DateTimeOffset.UtcNow })
+        : JsonSerializer.Serialize(new { type = "user", sessionId = "claude-session", cwd = "C:/Project",
+            isSidechain = false,
+            message = new { role = "user", content = new[] { new { type = "text", text = "the log said [Request interrupted by user] earlier" } } },
+            timestamp = DateTimeOffset.UtcNow });
+    private static string ClaudeInterrupt() => JsonSerializer.Serialize(new { type = "user",
+        sessionId = "claude-session", cwd = "C:/Project", isSidechain = false,
+        message = new { role = "user", content = new[] { new { type = "text", text = "[Request interrupted by user]" } } },
+        timestamp = DateTimeOffset.UtcNow });
 }

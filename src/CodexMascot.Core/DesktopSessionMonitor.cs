@@ -2,20 +2,21 @@ namespace CodexMascot.Core;
 
 public sealed record MonitorHealth(int Sessions, DateTimeOffset? LastEvent, long HookEvents, string Message);
 
-// Read-only observer for the current local JSONL format. Hooks are a supplementary source.
-// No thread/resume calls, database writes, prompt storage, or Codex process control.
+// Read-only observer for the current local JSONL format of one agent. Hooks are a supplementary
+// source. No resume calls, database writes, prompt storage, or agent process control.
 public sealed class DesktopSessionMonitor
 {
     private sealed class Tracked
     {
         public required string Path;
-        public required SessionIdentity Identity;
+        public required TranscriptContext Context;
         public required JsonlTail Tail;
         public string? ActiveTurn;
         public bool Stale;
         public DateTime LastWrite;
         public DateTimeOffset LastActivity;
         public HashSet<string> ClosedTurns = new(StringComparer.Ordinal);
+        public SessionIdentity Identity => Context.Identity;
     }
     private readonly Dictionary<string, Tracked> _files = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _hooksSeen = new(StringComparer.OrdinalIgnoreCase);
@@ -28,8 +29,10 @@ public sealed class DesktopSessionMonitor
     public event EventHandler<MonitorHealth>? HealthChanged;
     public string CodexHome { get; }
     public string HookDirectory { get; }
-    public DesktopSessionMonitor(string codexHome, string hookDirectory)
-    { CodexHome = codexHome; HookDirectory = hookDirectory; }
+    public IAgentAdapter Adapter { get; }
+    public AgentKind Kind => Adapter.Kind;
+    public DesktopSessionMonitor(string codexHome, string hookDirectory, IAgentAdapter? adapter = null)
+    { CodexHome = codexHome; HookDirectory = hookDirectory; Adapter = adapter ?? AgentAdapters.Codex; }
 
     public async Task RunAsync(CancellationToken ct)
     {
@@ -45,10 +48,10 @@ public sealed class DesktopSessionMonitor
 
     public void Poll()
     {
-        var sessionsRoot = Path.Combine(CodexHome, "sessions");
+        var sessionsRoot = Adapter.SessionsRoot(CodexHome);
         if (!Directory.Exists(sessionsRoot))
         {
-            HealthChanged?.Invoke(this, new(0, _lastEvent, _hookCount, "sessions 폴더가 없습니다. Codex 데이터 폴더를 선택하세요."));
+            HealthChanged?.Invoke(this, new(0, _lastEvent, _hookCount, Adapter.MissingRootMessage));
             return;
         }
         if (DateTimeOffset.UtcNow >= _nextScan)
@@ -71,7 +74,7 @@ public sealed class DesktopSessionMonitor
             {
                 if (!File.Exists(entry.Path))
                 {
-                    Emit(new(CodexEventKind.ThreadClosed, "기록 감시", entry.Identity.Id, Message: "기록 파일 이동 또는 보관됨") { ProjectPath = entry.Identity.Cwd, IsReplay = true });
+                    Emit(new(CodexEventKind.ThreadClosed, Adapter.TranscriptSource, entry.Identity.Id, Message: "기록 파일 이동 또는 보관됨") { ProjectPath = entry.Identity.Cwd, IsReplay = true });
                     _files.Remove(entry.Path);
                     continue;
                 }
@@ -84,7 +87,7 @@ public sealed class DesktopSessionMonitor
                 if (entry.ActiveTurn is not null && !entry.Stale && DateTimeOffset.UtcNow - entry.LastActivity > TimeSpan.FromMinutes(5))
                 {
                     entry.Stale = true;
-                    Emit(new(CodexEventKind.ThreadStatusChanged, "기록 감시", entry.Identity.Id,
+                    Emit(new(CodexEventKind.ThreadStatusChanged, Adapter.TranscriptSource, entry.Identity.Id,
                         Status: "unknown", Message: "5분간 기록 갱신 없음 · 완료로 판단하지 않음") { ProjectPath = entry.Identity.Cwd, IsReplay = true });
                 }
             }
@@ -92,26 +95,25 @@ public sealed class DesktopSessionMonitor
         }
         ReadHooks();
         HealthChanged?.Invoke(this, new(_files.Count, _lastEvent, _hookCount,
-            _files.Count == 0 ? "읽을 수 있는 로컬 작업 기록이 없습니다." : "로컬 기록 감시 중 · 목록은 최근 100개 기록 기준"));
+            _files.Count == 0 ? Adapter.DisplayName + ": 읽을 수 있는 로컬 작업 기록이 없습니다."
+                : Adapter.DisplayName + " 기록 감시 중 · 목록은 최근 100개 기록 기준"));
     }
 
     private void Discover(FileInfo file, bool replay)
     {
-        using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        var first = reader.ReadLine();
-        if (first is null) return;
-        var identity = DesktopEventParser.ReadIdentity(first);
+        var head = ReadHead(file.FullName);
+        var identity = Adapter.ReadIdentity(head);
         if (identity is null) return;
-        var entry = new Tracked { Path = file.FullName, Identity = identity,
+        var context = new TranscriptContext { Identity = identity };
+        var entry = new Tracked { Path = file.FullName, Context = context,
             Tail = new JsonlTail(Math.Max(0, file.Length - 4 * 1024 * 1024)), LastWrite = file.LastWriteTimeUtc };
         _files[file.FullName] = entry;
-        Emit(new(CodexEventKind.ThreadStarted, "기록 감시", identity.Id, OccurredAt: DateTimeOffset.MinValue)
+        Emit(new(CodexEventKind.ThreadStarted, Adapter.TranscriptSource, identity.Id, OccurredAt: DateTimeOffset.MinValue)
             { ProjectPath = identity.Cwd, IsReplay = true });
         var lines = entry.Tail.Read(file.FullName);
         if (!replay) { foreach (var line in lines) ProcessLine(entry, line, false); return; }
         // Reduce history to the last lifecycle state; old completions never produce notifications.
-        var events = lines.Select(line => DesktopEventParser.ParseTranscript(line, identity, true)).Where(e => e is not null).Cast<CodexEvent>().ToArray();
+        var events = lines.Select(line => Adapter.ParseTranscript(line, context, true)).Where(e => e is not null).Cast<CodexEvent>().ToArray();
         var lifecycle = events.LastOrDefault(e => e.Kind is CodexEventKind.TurnStarted or CodexEventKind.TurnCompleted);
         if (lifecycle is not null)
         {
@@ -128,9 +130,24 @@ public sealed class DesktopSessionMonitor
         }
     }
 
+    // Codex states its identity on the first record; Claude needs a few lines before cwd appears.
+    private IReadOnlyList<string> ReadHead(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+        var head = new List<string>();
+        for (var i = 0; i < Adapter.HeadLines; i++)
+        {
+            var line = reader.ReadLine();
+            if (line is null) break;
+            head.Add(line);
+        }
+        return head;
+    }
+
     private void ProcessLine(Tracked entry, string line, bool replay)
     {
-        var e = DesktopEventParser.ParseTranscript(line, entry.Identity, replay);
+        var e = Adapter.ParseTranscript(line, entry.Context, replay);
         if (e is null) return;
         entry.LastActivity = replay ? e.Time : DateTimeOffset.UtcNow;
         if (e.TurnId is not null && entry.ClosedTurns.Contains(e.TurnId)) return;
@@ -164,7 +181,7 @@ public sealed class DesktopSessionMonitor
             try
             {
                 if (file.Length > 16384) { _hooksSeen.Add(file.FullName); continue; }
-                var e = DesktopEventParser.ParseHook(File.ReadAllText(file.FullName));
+                var e = Adapter.ParseHook(File.ReadAllText(file.FullName), false);
                 _hooksSeen.Add(file.FullName);
                 if (e is null) continue;
                 _hookCount++;
