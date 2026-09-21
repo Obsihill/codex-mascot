@@ -67,6 +67,9 @@ public sealed class StateConfiguration
 public sealed class MonitorConfiguration
 {
     public string? CodexHome { get; set; }
+    public string? ClaudeHome { get; set; }
+    // "codex", "claude" or "both": which agents the monitor watches.
+    public string Provider { get; set; } = "both";
     public string? ProjectFilter { get; set; }
     public bool AutoStart { get; set; } = true;
     public string? CodexExecutable { get; set; }

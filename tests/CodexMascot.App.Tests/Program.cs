@@ -19,7 +19,11 @@ internal static class Program
     {
         if (args.FirstOrDefault() == "app-server") { FakeServer(); return; }
         if (args.FirstOrDefault() == "--probe-desktop")
-        { Console.WriteLine("Codex desktop window found: " + (CodexDesktopActivator.FindWindow() != IntPtr.Zero)); return; }
+        {
+            Console.WriteLine("Codex desktop window found: " + (CodexDesktopActivator.FindWindow(AgentKind.Codex) != IntPtr.Zero));
+            Console.WriteLine("Claude desktop window found: " + (CodexDesktopActivator.FindWindow(AgentKind.Claude) != IntPtr.Zero));
+            return;
+        }
         var dir = Path.Combine(Path.GetTempPath(), "mascot-app-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         try
@@ -71,6 +75,26 @@ internal static class Program
             Check(JsonNode.Parse(File.ReadAllText(hooksPath))!["hooks"]!["Stop"]!.AsArray().Count == 1, "remove only mascot hooks");
             Check(Directory.EnumerateFiles(home, "*.mascot-backup-*").Any(), "hook backup");
 
+            // Claude Code merges hooks from settings.json, which also holds unrelated user settings.
+            var claudeHome = Path.Combine(dir, "claude"); Directory.CreateDirectory(claudeHome);
+            var settingsPath = Path.Combine(claudeHome, "settings.json");
+            File.WriteAllText(settingsPath, """{"autoUpdatesChannel":"latest","permissions":{"allow":["Bash"]}}""");
+            HookIntegration.Install(claudeHome, AgentKind.Claude); HookIntegration.Install(claudeHome, AgentKind.Claude);
+            var settings = JsonNode.Parse(File.ReadAllText(settingsPath))!;
+            Check(settings["autoUpdatesChannel"]!.GetValue<string>() == "latest", "preserve unrelated Claude settings");
+            Check(settings["permissions"]!["allow"]!.AsArray().Count == 1, "preserve Claude permissions");
+            Check(settings["hooks"]!["Notification"]!.AsArray().Count == 1, "idempotent Claude hook installation");
+            Check(settings["hooks"]!["PreToolUse"]![0]!["matcher"]!.GetValue<string>().Contains("AskUserQuestion"), "Claude question matcher");
+            Check(settings["hooks"]!["Stop"]![0]!["hooks"]![0]!["command"]!.GetValue<string>().Contains("events-claude"), "Claude relay writes to its own folder");
+            Check(settings["hooks"]!["Interrupt"] is null, "no Codex-only hook name in Claude settings");
+            HookIntegration.Uninstall(claudeHome, AgentKind.Claude);
+            Check(JsonNode.Parse(File.ReadAllText(settingsPath))!["hooks"]!["Stop"]!.AsArray().Count == 0, "remove only mascot hooks from settings.json");
+            Check(JsonNode.Parse(File.ReadAllText(settingsPath))!["autoUpdatesChannel"] is not null, "uninstall keeps unrelated Claude settings");
+
+            Check(CodexDesktopActivator.IsClaudeDesktopExecutable(@"C:\Program Files\WindowsApps\Claude_2.2553.1.0_x64__pzs8sxrjxfjjc\app\Claude.exe"), "Claude Store package is the desktop app");
+            Check(!CodexDesktopActivator.IsClaudeDesktopExecutable(@"C:\Users\me\node_modules\@anthropic-ai\claude-code\bin\claude.exe"), "Claude CLI shim is not the desktop app");
+            Check(!CodexDesktopActivator.IsClaudeDesktopExecutable(@"C:\Program Files\WindowsApps\OpenAI.Codex_1.0_x64__x\app\ChatGPT.exe"), "Codex window is not a Claude window");
+
             var events = Path.Combine(dir, "events");
             var bridge = Path.Combine(AppContext.BaseDirectory, "integration", "Send-MascotEvent.ps1");
             var start = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
@@ -87,6 +111,19 @@ internal static class Program
             var record = File.ReadAllText(eventFile);
             Check(!record.Contains("SECRET") && !record.Contains("PERSIST"), "hook relay discards private payloads");
             Check(DesktopEventParser.ParseHook(record)?.Kind == CodexEventKind.ApprovalRequired, "relay to normalized event");
+            // The same relay script serves both agents: Claude Code sends the same stdin field names.
+            var claudeEvents = Path.Combine(dir, "claude-events");
+            var claudeRelay = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-File", bridge, "-EventDirectory", claudeEvents }) claudeRelay.ArgumentList.Add(arg);
+            using (var process = Process.Start(claudeRelay)!)
+            {
+                process.StandardInput.WriteLine("""{"session_id":"claude-fixture","cwd":"C:/fixture","hook_event_name":"Notification","tool_name":"Bash","prompt":"SHOULD_NOT_PERSIST"}""");
+                process.StandardInput.Close();
+                process.StandardOutput.ReadToEnd(); process.WaitForExit();
+            }
+            var claudeRecord = File.ReadAllText(Directory.EnumerateFiles(claudeEvents, "*.json").Single());
+            Check(!claudeRecord.Contains("PERSIST"), "claude relay discards private payloads");
+            Check(ClaudeEventParser.ParseHook(claudeRecord)?.Kind == CodexEventKind.ApprovalRequired, "claude relay to normalized event");
             var manager = new CustomizationManager();
             var original = File.ReadAllText(AppPaths.ConfigFile);
             try
@@ -107,7 +144,7 @@ internal static class Program
             }
             finally { File.WriteAllText(AppPaths.ConfigFile, original); }
             TestTransport(dir).GetAwaiter().GetResult();
-            Console.WriteLine("PASS: " + _count + " app assertions (popup lifetimes/clicks, desktop activation, GIF/WebP/sprites, themes, hook merge/relay, RPC approvals/EOF).");
+            Console.WriteLine("PASS: " + _count + " app assertions (popup lifetimes/clicks, Codex+Claude desktop activation, GIF/WebP/sprites, themes, hook merge/relay, RPC approvals/EOF).");
         }
         finally { Directory.Delete(dir, true); }
     }

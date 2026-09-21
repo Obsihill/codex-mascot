@@ -157,8 +157,7 @@ public partial class SettingsWindow : Window
         var values = new WrapPanel();
         var duration = Number("표시 시간 ms (0=계속)", cfg.ShowDurationMs, 0, 600000, v => cfg.ShowDurationMs = v);
         var held = _state == MascotState.Completed && _manager.Configuration.Global.KeepCompletedVisibleUntilClick;
-        duration.IsEnabled = !held;
-        if (held) _editor.Children.Add(Text("완료 팝업 유지가 켜져 있어 표시 시간은 적용되지 않습니다. 끄면 아래 시간으로 자동 닫힙니다."));
+        if (held) _editor.Children.Add(Text("해당 앱이 활성화되면 아래 표시 시간이 지난 뒤 완료 알림을 닫습니다(0이면 4초). 캐릭터를 직접 클릭하면 즉시 닫습니다."));
         values.Children.Add(duration);
         values.Children.Add(Check("애니메이션 반복", cfg.Loop, v => cfg.Loop = v));
         values.Children.Add(Number("스프라이트 가로 칸", cfg.SpriteColumns, 1, 32, v => { cfg.SpriteColumns = v; UpdatePreview(); }));

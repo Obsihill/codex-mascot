@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using CodexMascot.Core;
 
 namespace CodexMascot.App;
 
@@ -9,13 +10,26 @@ public enum DesktopActivationResult { Activated, NotFound, AttentionRequested }
 
 public static class CodexDesktopActivator
 {
-    public static DesktopActivationResult TryActivate()
-        => ActivateWindow(FindWindow(), new NativeWindowActivation());
+    public static bool IsForeground(AgentKind kind)
+    {
+        var window = GetForegroundWindow();
+        if (window == IntPtr.Zero || GetWindowThreadProcessId(window, out var pid) == 0) return false;
+        try
+        {
+            using var process = Process.GetProcessById((int)pid);
+            return Matches(kind, process.ProcessName) && IsDesktopExecutable(kind, process.MainModule?.FileName);
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or ArgumentException or NotSupportedException)
+        { return false; }
+    }
+    public static DesktopActivationResult TryActivate(AgentKind kind = AgentKind.Codex)
+        => ActivateWindow(FindWindow(kind), new NativeWindowActivation());
 
-    // Enumerate in desktop Z order so a previously used Codex window wins.
-    // The Windows Store Codex desktop can be named ChatGPT.exe; its package path
-    // distinguishes it from the separate ChatGPT application and the Codex CLI.
-    internal static IntPtr FindWindow()
+    // Enumerate in desktop Z order so a previously used agent window wins.
+    // The Windows Store Codex desktop can be named ChatGPT.exe and the Claude desktop
+    // Claude.exe; their package paths distinguish them from the separate ChatGPT
+    // application and from the CLI, which runs inside a console host we never steal.
+    internal static IntPtr FindWindow(AgentKind kind = AgentKind.Codex)
     {
         var candidate = IntPtr.Zero;
         EnumWindows((window, _) =>
@@ -28,9 +42,8 @@ public static class CodexDesktopActivator
             try
             {
                 using var process = Process.GetProcessById((int)pid);
-                if (!process.ProcessName.Equals("Codex", StringComparison.OrdinalIgnoreCase) &&
-                    !process.ProcessName.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase)) return true;
-                if (!IsDesktopExecutable(process.MainModule?.FileName)) return true;
+                if (!Matches(kind, process.ProcessName)) return true;
+                if (!IsDesktopExecutable(kind, process.MainModule?.FileName)) return true;
                 candidate = window;
                 return false;
             }
@@ -39,6 +52,13 @@ public static class CodexDesktopActivator
         }, IntPtr.Zero);
         return candidate;
     }
+
+    private static bool Matches(AgentKind kind, string name) => kind == AgentKind.Claude
+        ? name.Equals("Claude", StringComparison.OrdinalIgnoreCase)
+        : name.Equals("Codex", StringComparison.OrdinalIgnoreCase) || name.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsDesktopExecutable(AgentKind kind, string? path)
+        => kind == AgentKind.Claude ? IsClaudeDesktopExecutable(path) : IsDesktopExecutable(path);
 
     internal static bool IsDesktopExecutable(string? path)
     {
@@ -52,6 +72,23 @@ public static class CodexDesktopActivator
         return name.Equals("Codex.exe", StringComparison.OrdinalIgnoreCase) ||
             parts.Any(p => p.StartsWith("OpenAI.Codex_", StringComparison.OrdinalIgnoreCase)) ||
             path.Replace('/', '\\').Contains(@"\OpenAI\Codex\", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // The Claude desktop ships as a Store package (Claude_<version>\app\Claude.exe) or as a
+    // per-user install under AnthropicClaude. The node based CLI never matches: it runs as
+    // node.exe inside a console host, and bin/resources paths are excluded either way.
+    internal static bool IsClaudeDesktopExecutable(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        var normalized = path.Replace('/', '\\');
+        var parts = normalized.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+        if (!parts[^1].Equals("Claude.exe", StringComparison.OrdinalIgnoreCase)) return false;
+        if (parts.Any(p => p.Equals("bin", StringComparison.OrdinalIgnoreCase)
+            || p.Equals("resources", StringComparison.OrdinalIgnoreCase)
+            || p.Equals("node_modules", StringComparison.OrdinalIgnoreCase))) return false;
+        return parts.Any(p => p.StartsWith("Claude_", StringComparison.OrdinalIgnoreCase)
+            || p.Equals("AnthropicClaude", StringComparison.OrdinalIgnoreCase))
+            || normalized.Contains(@"\Programs\Claude\", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static DesktopActivationResult ActivateWindow(IntPtr window, IWindowActivation api)
@@ -91,6 +128,7 @@ public static class CodexDesktopActivator
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr window, StringBuilder name, int size);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
     [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr window);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr window, int command);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
     [DllImport("user32.dll")] private static extern bool FlashWindowEx(ref FlashInfo info);

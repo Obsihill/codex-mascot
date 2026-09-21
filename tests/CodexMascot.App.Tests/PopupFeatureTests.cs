@@ -57,6 +57,15 @@ internal static class PopupFeatureTests
             Pump(700);
             check(!overlay.IsVisible, "disabling hold starts the existing timeout immediately");
 
+            overlay.ShowState(MascotState.NeedsAttention, state, null);
+            Pump(700);
+            check(overlay.IsVisible && overlay.Opacity > .9, "approval remains visible regardless of duration and completion preference");
+            check(!IsClickThrough(overlay), "approval remains clickable with click-through enabled");
+            RaiseMouse(overlay, UIElement.MouseLeftButtonDownEvent);
+            RaiseMouse(overlay, UIElement.MouseLeftButtonUpEvent);
+            Pump(350);
+            check(!overlay.IsVisible, "click dismisses approval popup");
+
             overlay.ShowState(MascotState.Completed, state, null);
             global.KeepCompletedVisibleUntilClick = true;
             overlay.ApplyGlobal(global);
@@ -76,14 +85,8 @@ internal static class PopupFeatureTests
             Pump(700);
             check(!overlay.IsVisible, "replacement warning keeps its own lifetime");
 
-            var clicked = 0; var dismissed = 0;
+            var clicked = 0;
             overlay.Clicked += (_, _) => clicked++;
-            overlay.Dismissed += (_, _) => dismissed++;
-            overlay.ShowState(MascotState.Completed, state, null);
-            var close = ((Grid)overlay.Content).Children.OfType<Button>().Single();
-            close.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Pump(350);
-            check(dismissed == 1 && clicked == 0 && !overlay.IsVisible, "close button dismisses without opening Codex");
             overlay.ShowState(MascotState.Completed, state, null);
             RaiseMouse(overlay, UIElement.MouseLeftButtonDownEvent);
             RaiseMouse(overlay, UIElement.MouseLeftButtonUpEvent);

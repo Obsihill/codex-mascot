@@ -9,6 +9,5 @@
    <StackPanel VerticalAlignment="Center"><TextBlock x:Name="FallbackEmoji" Text="★" FontSize="68" Foreground="#70D6FF" HorizontalAlignment="Center"/>
     <TextBlock x:Name="FallbackText" Foreground="White" FontSize="16" TextAlignment="Center"/></StackPanel>
   </Border>
-  <Button Content="×" Width="28" Height="28" Padding="0" Margin="0" HorizontalAlignment="Right" VerticalAlignment="Top" Click="Dismiss_OnClick" ToolTip="알림 닫기"/>
  </Grid>
 </Window>
