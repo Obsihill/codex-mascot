@@ -26,3 +26,10 @@ Thumbs.db
 
 # Archives generated for delivery
 *.zip
+
+# Generated distribution and local configuration
+Release/
+config/mascot.json
+
+# Local notes (untracked)
+.local/
