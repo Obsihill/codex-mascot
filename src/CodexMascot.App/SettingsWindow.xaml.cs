@@ -131,18 +131,18 @@ public partial class SettingsWindow : Window
         imagePath.TextTrimming = TextTrimming.CharacterEllipsis; soundPath.TextTrimming = TextTrimming.CharacterEllipsis;
         _editor.Children.Add(_preview);
         var imageRow = new WrapPanel();
-        imageRow.Children.Add(Button("이미지 선택", () =>
+        imageRow.Children.Add(Button("이미지 / 영상 선택", () =>
         {
-            var dialog = new OpenFileDialog { Filter = "이미지 (GIF, PNG, WebP)|*.gif;*.png;*.webp", InitialDirectory = AppPaths.ImagesDirectory };
+            var dialog = new OpenFileDialog { Filter = "이미지 / 영상|*.gif;*.png;*.webp;*.mp4;*.m4v;*.wmv;*.avi;*.mov|영상|*.mp4;*.m4v;*.wmv;*.avi;*.mov|이미지|*.gif;*.png;*.webp", InitialDirectory = AppPaths.ImagesDirectory };
             if (dialog.ShowDialog(this) != true) return;
             Try(() =>
             {
-                MascotImageLoader.Load(dialog.FileName, cfg);
+                if (!MascotMedia.IsVideo(dialog.FileName)) MascotImageLoader.Load(dialog.FileName, cfg);
                 cfg.Image = _manager.ImportAsset(dialog.FileName, false); Save(); imagePath.Text = cfg.Image;
                 UpdatePreview(); Preview(false);
             });
         }));
-        imageRow.Children.Add(Button("이미지만 테스트", () => Preview(false)));
+        imageRow.Children.Add(Button("이미지 / 영상 테스트 (무음)", () => Preview(false)));
         _editor.Children.Add(imageRow); _editor.Children.Add(imagePath);
         var soundRow = new WrapPanel();
         soundRow.Children.Add(Button("사운드 선택", () =>
@@ -152,7 +152,8 @@ public partial class SettingsWindow : Window
         }));
         soundRow.Children.Add(Button("소리만 테스트", PlaySound));
         soundRow.Children.Add(Button("소리 제거", () => { cfg.Sound = null; Save(); soundPath.Text = "사운드 없음"; }));
-        soundRow.Children.Add(Button("이미지 + 소리", () => Preview(true)));
+        soundRow.Children.Add(Button("이미지 / 영상 + 소리", () => Preview(true)));
+        _editor.Children.Add(Text("영상은 내장 오디오를 재생하며 별도 사운드는 겹쳐 재생하지 않습니다. 전체·상태별 볼륨과 소리 사용 설정이 적용됩니다. 지원 코덱은 Windows 환경에 따라 다릅니다."));
         _editor.Children.Add(soundRow); _editor.Children.Add(soundPath);
         var values = new WrapPanel();
         var duration = Number("표시 시간 ms (0=계속)", cfg.ShowDurationMs, 0, 600000, v => cfg.ShowDurationMs = v);
@@ -172,6 +173,8 @@ public partial class SettingsWindow : Window
         try
         {
             var path = _manager.ResolveImage(_state);
+            if (MascotMedia.IsVideo(path))
+            { _preview.Source = null; _feedback.Text = "영상 선택됨 · 테스트 버튼으로 재생하세요."; return; }
             _preview.Source = path is null ? null : MascotImageLoader.Load(path, _manager.Configuration.For(_state))[0].Bitmap;
         }
         catch (Exception ex) { _preview.Source = null; _feedback.Text = "이미지 오류: " + ex.Message; }
@@ -184,9 +187,9 @@ public partial class SettingsWindow : Window
     private void ShowAndPlay(MascotState state, bool sound)
     {
         _overlay.ApplyGlobal(_manager.Configuration.Global);
-        _overlay.ShowState(state, _manager.Configuration.For(state), _manager.ResolveImage(state));
+        _overlay.ShowState(state, _manager.Configuration.For(state), _manager.ResolveImage(state), sound);
         _feedback.Text = _overlay.LastImageError is null ? MainWindow.StateName(state) + " 이미지 표시 · " + _overlay.DescribePosition() : "대체 이미지 표시: " + _overlay.LastImageError;
-        if (sound) PlaySound(state);
+        if (sound && !MascotMedia.IsVideo(_manager.ResolveImage(state))) PlaySound(state);
     }
     private void PlaySound() { _sound.Stop(); PlaySound(_state); }
     private void PlaySound(MascotState state)

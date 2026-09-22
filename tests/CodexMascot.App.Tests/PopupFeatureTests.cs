@@ -94,6 +94,29 @@ internal static class PopupFeatureTests
             check(clicked == 1 && !overlay.IsVisible, "left click emits activation once and dismisses popup");
             RaiseMouse(overlay, UIElement.MouseLeftButtonUpEvent);
             check(clicked == 1, "mouse release without press cannot reopen desktop");
+            var videoFixture = Environment.GetEnvironmentVariable("MASCOT_VIDEO_TEST_FILE");
+            if (!string.IsNullOrWhiteSpace(videoFixture))
+            {
+                var video = (MediaElement)overlay.FindName("MascotVideo");
+                var opened = false;
+                video.MediaOpened += (_, _) => opened = true;
+                global.MasterVolume = .5; global.SoundEnabled = false;
+                overlay.ApplyGlobal(global);
+                var videoState = new StateConfiguration { Loop = true, Volume = .4 };
+                overlay.ShowState(MascotState.Completed, videoState, videoFixture);
+                for (var attempt = 0; attempt < 50 && !opened && overlay.LastImageError is null; attempt++) Pump(100);
+                check(opened && video.NaturalVideoWidth > 0 && video.HasAudio, "MP4 video and embedded audio open in WPF");
+                check(video.IsMuted && Math.Abs(video.Volume - .2) < .001, "video respects mute and combined volume");
+                Pump(1500);
+                check(video.Source is not null && overlay.LastImageError is null, "looping video remains available after end");
+                overlay.HideMascot();
+                check(video.Source is null, "dismiss releases video and audio source immediately");
+                overlay.ShowState(MascotState.Completed, videoState, videoFixture, false);
+                global.SoundEnabled = true; overlay.ApplyGlobal(global);
+                check(video.IsMuted, "silent video preview stays muted when global audio is enabled");
+                overlay.ShowState(MascotState.Completed, videoState, null);
+                check(video.Source is null, "switching to an image releases video");
+            }
         }
         finally { overlay.Close(); SynchronizationContext.SetSynchronizationContext(previousContext); }
     }

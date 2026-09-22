@@ -274,11 +274,12 @@ public partial class MainWindow : Window
             state == MascotState.Idle && !_customization.Configuration.Global.ShowIdle)
         { _overlay.HideMascot(); return; }
         var cfg = _customization.Configuration.For(state);
+        _sound.Stop();
         _overlay.ShowState(state, cfg, _customization.ResolveImage(state));
         _popupAgent = ActivationTarget();
         _foregroundDismissAfter = DateTimeOffset.UtcNow.AddMilliseconds(
             state == MascotState.Completed ? (cfg.ShowDurationMs > 0 ? cfg.ShowDurationMs : 4000) : 0);
-        if (sound && _customization.Configuration.Global.SoundEnabled &&
+        if (sound && !MascotMedia.IsVideo(_customization.ResolveImage(state)) && _customization.Configuration.Global.SoundEnabled &&
             state is MascotState.Completed or MascotState.Failed or MascotState.NeedsAttention)
             _sound.Play(_customization.ResolveAsset(cfg.Sound), cfg.Volume * _customization.Configuration.Global.MasterVolume);
     }

@@ -18,6 +18,7 @@ public partial class OverlayWindow : Window
     private int _frame, _generation;
     private bool _loop, _dragged, _closed, _pressed, _hiding;
     private bool _keepCompletedVisible = true;
+    private bool _videoSound;
     private MascotState _state;
     private StateConfiguration? _stateConfiguration;
     private Point _press;
@@ -33,6 +34,16 @@ public partial class OverlayWindow : Window
     public OverlayWindow()
     {
         InitializeComponent();
+        MascotVideo.MediaEnded += (_, _) =>
+        {
+            if (_loop && !_hiding && !_closed)
+            { MascotVideo.Position = TimeSpan.Zero; MascotVideo.Play(); }
+        };
+        MascotVideo.MediaFailed += (_, e) =>
+        {
+            if (_closed || _hiding || MascotVideo.Source is null) return;
+            ShowMediaError("영상을 재생할 수 없습니다. 파일 또는 Windows 코덱을 확인하세요: " + e.ErrorException.Message);
+        };
         _timer.Tick += (_, _) =>
         {
             if (_frames.Count == 0) return;
@@ -67,13 +78,14 @@ public partial class OverlayWindow : Window
             _dragged = false;
             if (clicked) { HideMascot(); Clicked?.Invoke(this, EventArgs.Empty); }
         };
-        Closed += (_, _) => { _closed = true; _timer.Stop(); _display?.Cancel(); _display?.Dispose(); };
+        Closed += (_, _) => { _closed = true; MascotVideo.Close(); _timer.Stop(); _display?.Cancel(); _display?.Dispose(); };
     }
     public void ApplyGlobal(GlobalConfiguration config)
     {
         var lifetimeChanged = _keepCompletedVisible != config.KeepCompletedVisibleUntilClick;
         _keepCompletedVisible = config.KeepCompletedVisibleUntilClick;
         _global = config;
+        UpdateVideoVolume();
         Width = 260 * Math.Clamp(config.Scale, .4, 3);
         Height = 280 * Math.Clamp(config.Scale, .4, 3);
         Topmost = config.AlwaysOnTop;
@@ -98,26 +110,37 @@ public partial class OverlayWindow : Window
         var name = _global.Position switch { "top-left" => "왼쪽 위", "top-right" => "오른쪽 위", "bottom-left" => "왼쪽 아래", "center" => "중앙", "custom" => "직접 지정한 위치", _ => "오른쪽 아래" };
         return GetScreen().DeviceName + " · " + name;
     }
-    public void ShowState(MascotState state, StateConfiguration config, string? imagePath)
+    public void ShowState(MascotState state, StateConfiguration config, string? imagePath, bool videoSound = true)
     {
         if (_closed) return;
         _state = state; _stateConfiguration = config; _hiding = false;
+        MascotVideo.Close(); MascotVideo.Source = null; MascotVideo.Visibility = Visibility.Collapsed;
+        _videoSound = videoSound && !PlacementMode;
         _timer.Stop(); _frames = Array.Empty<MascotFrame>(); _frame = 0; _loop = config.Loop;
         LastImageError = null;
         try
         {
             if (imagePath is null) throw new FileNotFoundException("이미지 파일이 없습니다.");
+            if (MascotMedia.IsVideo(imagePath))
+            {
+                if (!File.Exists(imagePath)) throw new FileNotFoundException("영상 파일이 없습니다.");
+                MascotImage.Visibility = Visibility.Collapsed; FallbackCard.Visibility = Visibility.Collapsed;
+                MascotVideo.Visibility = Visibility.Visible;
+                UpdateVideoVolume();
+                MascotVideo.Source = new Uri(Path.GetFullPath(imagePath));
+                MascotVideo.Play();
+            }
+            else
+            {
             _frames = MascotImageLoader.Load(imagePath, config);
             MascotImage.Source = _frames[0].Bitmap;
             MascotImage.Visibility = Visibility.Visible; FallbackCard.Visibility = Visibility.Collapsed;
             if (_frames.Count > 1) { _timer.Interval = TimeSpan.FromMilliseconds(_frames[0].DelayMs); _timer.Start(); }
+            }
         }
         catch (Exception ex)
         {
-            LastImageError = ex.Message;
-            MascotImage.Visibility = Visibility.Collapsed; FallbackCard.Visibility = Visibility.Visible;
-            FallbackEmoji.Text = state switch { MascotState.Running => "⚙", MascotState.Completed => "★", MascotState.Failed => "!", MascotState.NeedsAttention => "?", MascotState.Interrupted => "Ⅱ", _ => "●" };
-            FallbackText.Text = MainWindow.StateName(state);
+            ShowMediaError(ex.Message);
         }
         if (!IsVisible) { Opacity = 0; Show(); }
         PositionWindow(); ApplyStyles(); Fade(1, 150);
@@ -137,7 +160,20 @@ public partial class OverlayWindow : Window
     public void HideMascot()
     {
         if (_closed) return;
-        _hiding = true; _display?.Cancel(); Fade(0, 250);
+        _hiding = true; MascotVideo.Stop(); MascotVideo.Close(); MascotVideo.Source = null; _display?.Cancel(); Fade(0, 250);
+    }
+    private void UpdateVideoVolume()
+    {
+        MascotVideo.IsMuted = !_videoSound || !_global.SoundEnabled;
+        MascotVideo.Volume = Math.Clamp(_global.MasterVolume * (_stateConfiguration?.Volume ?? 1), 0, 1);
+    }
+    private void ShowMediaError(string message)
+    {
+        LastImageError = message;
+        MascotVideo.Close(); MascotVideo.Source = null; MascotVideo.Visibility = Visibility.Collapsed;
+        MascotImage.Visibility = Visibility.Collapsed; FallbackCard.Visibility = Visibility.Visible;
+        FallbackEmoji.Text = _state switch { MascotState.Running => "⚙", MascotState.Completed => "★", MascotState.Failed => "!", MascotState.NeedsAttention => "?", MascotState.Interrupted => "Ⅱ", _ => "●" };
+        FallbackText.Text = MainWindow.StateName(_state);
     }
     private void Fade(double opacity, int ms)
     {
