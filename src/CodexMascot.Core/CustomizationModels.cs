@@ -28,8 +28,8 @@ public sealed class MascotConfiguration
     {
         ["idle"] = new() { Image = "assets/images/idle.png", ShowDurationMs = 0, Loop = true },
         ["running"] = new() { Image = "assets/images/running.png", ShowDurationMs = 1200, Loop = false },
-        ["needsAttention"] = new() { Image = "assets/images/attention.png", Sound = "assets/sounds/attention.wav", ShowDurationMs = 0, Loop = true, Volume = 0.8 },
-        ["completed"] = new() { Image = "assets/images/completed.png", Sound = "assets/sounds/completed.wav", ShowDurationMs = 4000, Loop = false, Volume = 0.8 },
+        ["needsAttention"] = new() { Image = "assets/images/attention.png", Sound = "assets/sounds/attention.wav", ShowDurationMs = 0, Loop = true },
+        ["completed"] = new() { Image = "assets/images/completed.png", Sound = "assets/sounds/completed.wav", ShowDurationMs = 4000, Loop = false },
         ["failed"] = new() { Image = "assets/images/failed.png", Sound = "assets/sounds/failed.wav", ShowDurationMs = 6000, Loop = false, Volume = 1.0 },
         ["interrupted"] = new() { Image = "assets/images/interrupted.png", ShowDurationMs = 3000, Loop = false }
     };
@@ -44,7 +44,7 @@ public sealed class GlobalConfiguration
     public bool KeepCompletedVisibleUntilClick { get; set; } = true;
     public bool BringCodexToFrontOnClick { get; set; } = true;
     public bool SoundEnabled { get; set; } = true;
-    public double MasterVolume { get; set; } = 0.8;
+    public double MasterVolume { get; set; } = 1;
     public string? MonitorDevice { get; set; }
     public double? CustomLeft { get; set; }
     public double? CustomTop { get; set; }
@@ -54,11 +54,12 @@ public sealed class GlobalConfiguration
 
 public sealed class StateConfiguration
 {
+    public double PlaybackSpeed { get; set; } = 1;
     public string? Image { get; set; }
     public string? Sound { get; set; }
     public int ShowDurationMs { get; set; }
     public bool Loop { get; set; }
-    public double Volume { get; set; } = 0.8;
+    public double Volume { get; set; } = 1;
     public int SpriteColumns { get; set; } = 1;
     public int SpriteRows { get; set; } = 1;
     public int FrameDurationMs { get; set; } = 100;

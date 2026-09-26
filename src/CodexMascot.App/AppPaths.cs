@@ -6,6 +6,7 @@ public static class AppPaths
     public static string ImagesDirectory => Path.Combine(AssetsDirectory, "images");
     public static string SoundsDirectory => Path.Combine(AssetsDirectory, "sounds");
     public static string ConfigDirectory => Path.Combine(BaseDirectory, "config");
+    public static string LibraryDirectory => Path.Combine(BaseDirectory, "library");
     public static string ConfigFile => Path.Combine(ConfigDirectory, "mascot.json");
     private static string FindWritableRoot()
     {

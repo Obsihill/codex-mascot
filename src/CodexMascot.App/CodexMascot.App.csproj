@@ -15,6 +15,7 @@
     <InternalsVisibleTo Include="CodexMascot.App.Tests" />
     <ProjectReference Include="..\CodexMascot.Core\CodexMascot.Core.csproj" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <Content Include="..\..\assets\**\*" Link="assets\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\integration\**\*" Link="integration\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\README.md" Link="README.md" CopyToPublishDirectory="PreserveNewest" />

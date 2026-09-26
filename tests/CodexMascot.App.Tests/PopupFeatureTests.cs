@@ -88,6 +88,15 @@ internal static class PopupFeatureTests
             var clicked = 0;
             overlay.Clicked += (_, _) => clicked++;
             overlay.ShowState(MascotState.Completed, state, null);
+            var beforeDrag = (overlay.Left, overlay.Top);
+            RaiseMouse(overlay, UIElement.MouseLeftButtonDownEvent);
+            check(!overlay.BeginPlacementDrag(), "normal notifications refuse drag movement");
+            RaiseMouse(overlay, UIElement.MouseLeftButtonUpEvent);
+            check(clicked == 0 && overlay.IsVisible && (overlay.Left, overlay.Top) == beforeDrag, "locked drag does not move or acknowledge notification");
+            overlay.PlacementMode = true;
+            check(overlay.BeginPlacementDrag(), "explicit placement mode alone permits drag movement");
+            overlay.CompletePlacementDrag();
+            overlay.PlacementMode = false;
             RaiseMouse(overlay, UIElement.MouseLeftButtonDownEvent);
             RaiseMouse(overlay, UIElement.MouseLeftButtonUpEvent);
             Pump(350);
@@ -116,6 +125,17 @@ internal static class PopupFeatureTests
                 check(video.IsMuted, "silent video preview stays muted when global audio is enabled");
                 overlay.ShowState(MascotState.Completed, videoState, null);
                 check(video.Source is null, "switching to an image releases video");
+                global.SoundEnabled = false; global.MasterVolume = 1; overlay.ApplyGlobal(global);
+                opened = false;
+                overlay.ShowState(MascotState.Completed, new StateConfiguration { Volume = 2, Loop = true }, videoFixture);
+                for (var attempt = 0; attempt < 50 && !opened && overlay.LastImageError is null; attempt++) Pump(100);
+                check(opened && overlay.HasBoostAudio && overlay.LastAudioError is null && video.IsMuted, "200 percent video prepares software audio without duplicate WPF audio (silent output test)");
+                Pump(1500);
+                check(overlay.HasBoostAudio && overlay.LastAudioError is null, "boosted looping video restarts audio pipeline");
+                overlay.HideMascot();
+                check(!overlay.HasBoostAudio && video.Source is null, "dismiss synchronously releases boosted video audio");
+                Pump(350);
+                check(!overlay.HasBoostAudio, "late media callbacks cannot restart dismissed audio");
             }
         }
         finally { overlay.Close(); SynchronizationContext.SetSynchronizationContext(previousContext); }
