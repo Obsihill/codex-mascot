@@ -1,4 +1,4 @@
-# Agent Mascot for Windows — 0.2.3
+# Agent Mascot for Windows — 0.2.4
 
 Windows 10/11 x64용 캐릭터 작업 알림 앱입니다. Codex와 Claude Code가 이미 실행 중인 프로젝트 작업을 로컬 기록에서 읽습니다. 새 작업을 시작할 필요가 없습니다.
 
