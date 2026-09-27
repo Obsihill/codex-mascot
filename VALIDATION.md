@@ -1,5 +1,13 @@
 # 검증 기록
 
+## 0.2.3 릴리스 — 2026-09-27
+
+- PR #2(Mascot Studio·폴더 라이브러리·영상·다중 마스코트 재생)를 main에 병합하고 버전을 0.2.1 → 0.2.3으로 올림.
+- Windows x64, .NET SDK 9.0.306 / .NET 8 WPF, Release 빌드 경고 0·오류 0.
+- Core 88개 + App 595개 assertion 통과. 스크립트 실행이 제한된 로컬 PowerShell에서는 앱 테스트를 `PSExecutionPolicyPreference=Bypass`로 실행해야 함(코드 문제 아님).
+- `dotnet publish -c Release -r win-x64 --self-contained true` 결과를 CodexMascot-0.2.3-Windows-x64.zip(71.3MB)으로 묶어 릴리스에 첨부함. EXE 파일 버전 0.2.3.0 확인.
+- 배포본에 개인 설정·라이브러리·테스트 미디어가 들어가지 않았음을 확인함.
+
 ## Mascot Studio preview — 2026-09-27
 
 - Windows x64, .NET SDK 9.0.306 / .NET 8 WPF, Release 빌드 경고 0·오류 0.
