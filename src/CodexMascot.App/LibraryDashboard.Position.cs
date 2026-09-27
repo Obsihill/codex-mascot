@@ -14,17 +14,28 @@ public partial class LibraryDashboard
         var m = _current; var scope = _activeState; var state = PreviewEvent;
         var global = LibraryStore.Placement(m, _manager.Configuration.Global, state);
         global.KeepCompletedVisibleUntilClick = false; global.ClickThrough = false;
-        var bounds = OverlayWindow.PlacementBounds(global);
+        var center = OverlayWindow.PlacementCenter(global);
+        // Translate legacy top-left/preset positions for this preview only. Merely
+        // opening the dialog must not rewrite saved positions or create history.
+        global.Position = "custom-center"; global.CustomLeft = center.X; global.CustomTop = center.Y;
         var panel = new StackPanel { Margin = new Thickness(24) };
         var coordinates = new Grid();
         foreach (var width in new[] { new GridLength(1, GridUnitType.Star), new GridLength(18), new GridLength(1, GridUnitType.Star) })
             coordinates.ColumnDefinitions.Add(new ColumnDefinition { Width = width });
-        var x = new NumericDragInput { Name = "PositionX", Label = "X", Icon = PencilIconKind.Position, Value = bounds.Left, Minimum = int.MinValue, Maximum = int.MaxValue };
-        var y = new NumericDragInput { Name = "PositionY", Label = "Y", Icon = PencilIconKind.Position, Value = bounds.Top, Minimum = int.MinValue, Maximum = int.MaxValue };
+        var x = new NumericDragInput { Name = "PositionX", Label = "X", Icon = PencilIconKind.Position, Value = center.X, Minimum = int.MinValue, Maximum = int.MaxValue };
+        var y = new NumericDragInput { Name = "PositionY", Label = "Y", Icon = PencilIconKind.Position, Value = center.Y, Minimum = int.MinValue, Maximum = int.MaxValue };
         Grid.SetColumn(y, 2);
         coordinates.Children.Add(x); coordinates.Children.Add(y);
         panel.Children.Add(coordinates);
-        var window = Dialog("위치 선택", panel);
+        var scale = new NumericDragInput
+        {
+            Name = "PositionScale", Label = "크기", Value = global.Scale,
+            Minimum = .4, Maximum = 3, DisplayScale = 100, UnitsPerPixel = 1, Suffix = "%",
+            ShowValueFill = true, Margin = new Thickness(0, 14, 0, 0),
+            IsMixed = scope is null && CustomizationManager.States.Select(s => m.Settings(s).Scale ?? _manager.Configuration.Global.Scale).Distinct().Count() > 1
+        };
+        panel.Children.Add(scale);
+        var window = Dialog("위치 크기 변경", panel);
         var error = new TextBlock { Foreground = Brushes.Firebrick, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
         panel.Children.Add(error);
         OverlayWindow? overlay = null;
@@ -34,7 +45,7 @@ public partial class LibraryDashboard
         }
         void PreviewCoordinates()
         {
-            global.Position = "custom"; global.CustomLeft = x.Value; global.CustomTop = y.Value; global.MonitorDevice = null;
+            global.Position = "custom-center"; global.CustomLeft = x.Value; global.CustomTop = y.Value; global.MonitorDevice = null;
             overlay?.ApplyGlobal(global);
         }
         void CommitCoordinates()
@@ -45,9 +56,20 @@ public partial class LibraryDashboard
         }
         void FinishInputs()
         {
-            foreach (var input in new[] { x, y })
+            foreach (var input in new[] { x, y, scale })
                 if (input.IsScrubbing || !input.TryCommitText()) input.CancelEdit();
         }
+        scale.ValuePreviewed += (_, _) =>
+        {
+            global.Scale = scale.Value;
+            overlay?.ApplyGlobal(global);
+        };
+        scale.ValueCommitted += (_, _) =>
+        {
+            if (!SaveScale(m.Id, scope, scale.Value))
+            { error.Text = "크기를 저장하지 못했습니다."; error.Visibility = Visibility.Visible; }
+            else error.Visibility = Visibility.Collapsed;
+        };
         x.ValuePreviewed += (_, _) => PreviewCoordinates(); y.ValuePreviewed += (_, _) => PreviewCoordinates();
         x.ValueCommitted += (_, _) => CommitCoordinates(); y.ValueCommitted += (_, _) => CommitCoordinates();
         window.Loaded += (_, _) =>

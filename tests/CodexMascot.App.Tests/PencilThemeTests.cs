@@ -36,7 +36,7 @@ internal static class PencilThemeTests
         var borderA = PencilGeometry.Rectangle(new Size(260, 40));
         var borderB = PencilGeometry.Rectangle(new Size(260, 40));
         check(borderA.IsFrozen && borderA.ToString() == borderB.ToString(), "pencil borders are stable across repeated render/hover passes");
-        var store = new LibraryStore(Path.Combine(dir, "pencil-library.json"));
+        var store = TestLibrary.Create(Path.Combine(dir, "pencil-library.json"));
         var dashboard = new LibraryDashboard(); dashboard.Initialize(store, new CustomizationManager());
         var host = new Window { Content = dashboard, Width = 1220, Height = 900, ShowInTaskbar = false, ShowActivated = false };
         try
@@ -51,6 +51,7 @@ internal static class PencilThemeTests
                 var input = (NumericDragInput)dashboard.FindName(field);
                 check(input.Icon == kind && AutomationProperties.GetName(input) == input.Label && input.Content is PencilBorder, field + " retains numeric editing/accessibility with its pencil icon");
                 check(input.Editor.FontFamily == PencilFonts.Numbers, field + " keeps readable numeric input");
+                check(input.ShowValueFill == (field is "VolumeInput" or "SpeedInput"), field + " opts into value fill only for volume and speed");
                 CheckHover(check, input, (PencilBorder)input.Content, field);
             }
             foreach (var (button, kind) in new[] { ("TestButton", PencilIconKind.Play), ("AppSettingsButton", PencilIconKind.Settings), ("PositionButton", PencilIconKind.Position), ("ResetSettingsButton", PencilIconKind.Reset), ("RegisterButton", PencilIconKind.Add), ("DeleteButton", PencilIconKind.Delete) })
@@ -70,8 +71,9 @@ internal static class PencilThemeTests
                 var body = Descendants<PencilBorder>(item).Single(b => b.Name == "CardBody");
                 var grid = (Grid)body.Child;
                 var cover = grid.Children.OfType<Image>().Single();
-                var caption = grid.Children.OfType<TextBlock>().Single();
-                check(body.BorderThickness == new Thickness(1) && grid.RowDefinitions.Count == 0 && Grid.GetRow(cover) == Grid.GetRow(caption) && caption.VerticalAlignment == VerticalAlignment.Bottom, name + " name overlays the image instead of reserving a caption row");
+                var captionBox = grid.Children.OfType<Border>().Single();
+                var caption = (TextBlock)captionBox.Child;
+                check(body.BorderThickness == new Thickness(1) && grid.RowDefinitions.Count == 0 && Grid.GetRow(cover) == Grid.GetRow(captionBox) && captionBox.VerticalAlignment == VerticalAlignment.Bottom && caption.VerticalAlignment == VerticalAlignment.Center, name + " editable name box overlays the image with centered text");
                 var coverBounds = cover.TransformToAncestor(grid).TransformBounds(new Rect(cover.RenderSize));
                 var captionBounds = caption.TransformToAncestor(grid).TransformBounds(new Rect(caption.RenderSize));
                 check(coverBounds.Contains(captionBounds) && Panel.GetZIndex(caption) > Panel.GetZIndex(cover), name + " caption is drawn inside and above the full-size image");
@@ -178,7 +180,7 @@ internal static class PencilThemeTests
         var viewer = new ScrollViewer { Width = 260, Height = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Visible, HorizontalScrollBarVisibility = ScrollBarVisibility.Visible,
             Content = new Border { Width = 900, Height = 1200, Background = PencilPalette.Inset, Child = new TextBlock { Text = "스크롤 테스트" } } };
         var host = new Window { Content = viewer, SizeToContent = SizeToContent.WidthAndHeight, ShowInTaskbar = false, ShowActivated = false };
-        host.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/CodexMascot.App;component/PencilTheme.xaml", UriKind.Relative) });
+        host.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/AgentMascot;component/PencilTheme.xaml", UriKind.Relative) });
         try
         {
             host.Show(); host.UpdateLayout(); Pump();
@@ -243,7 +245,7 @@ internal static class PencilThemeTests
     private static void EditableDropdown(Action<bool, string> check)
     {
         var combo = new ComboBox { IsEditable = true, Width = 280, MaxDropDownHeight = 150 };
-        combo.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/CodexMascot.App;component/PencilTheme.xaml", UriKind.Relative) });
+        combo.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/AgentMascot;component/PencilTheme.xaml", UriKind.Relative) });
         for (var i = 0; i < 30; i++) combo.Items.Add(new ComboBoxItem { Content = "프로젝트 " + i });
         combo.SelectedIndex = 0;
         var host = new Window { Content = combo, SizeToContent = SizeToContent.WidthAndHeight, ShowInTaskbar = false, ShowActivated = false };
@@ -282,7 +284,7 @@ internal static class PencilThemeTests
         var jobs = new ListView { View = view, ItemsSource = new[] { new { Name = "작업 1" }, new { Name = "작업 2" } } };
         foreach (var control in new Control[] { text, checkbox, toggle, tabs, list, jobs }) panel.Children.Add(control);
         var host = new Window { Content = panel, Width = 500, Height = 500, ShowInTaskbar = false, ShowActivated = false };
-        host.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/CodexMascot.App;component/PencilTheme.xaml", UriKind.Relative) });
+        host.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/AgentMascot;component/PencilTheme.xaml", UriKind.Relative) });
         toggle.Style = (Style)host.Resources["PencilToggle"];
         try
         {
@@ -323,7 +325,7 @@ internal static class PencilThemeTests
         control.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = value ? Mouse.MouseEnterEvent : Mouse.MouseLeaveEvent });
         control.UpdateLayout();
     }
-    private static void CheckHover(Action<bool, string> check, Control control, PencilBorder border, string name)
+    internal static void CheckHover(Action<bool, string> check, Control control, PencilBorder border, string name)
     {
         var enabled = control.IsEnabled; var wasOver = control.IsMouseOver;
         try

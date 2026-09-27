@@ -10,7 +10,7 @@ internal static class LibrarySettingsTests
     public static void Run(Action<bool, string> check, string dir)
     {
         var context = SynchronizationContext.Current;
-        var store = new LibraryStore(Path.Combine(dir, "state-settings.json"));
+        var store = TestLibrary.Create(Path.Combine(dir, "state-settings.json"));
         var dashboard = new LibraryDashboard(); dashboard.Initialize(store, new CustomizationManager());
         var window = new Window { Content = dashboard, Width = 1220, Height = 900, ShowInTaskbar = false, ShowActivated = false };
         try
@@ -28,6 +28,16 @@ internal static class LibrarySettingsTests
             Click("StateSettingsButton"); volume.CommitValue(2);
             Control<NumericDragInput>("SpeedInput").CommitValue(1.5);
             Toggle("LoopCheck", true); Toggle("PlayCheck", false);
+            check(new[] { "VolumeInput", "SpeedInput", "DurationInput", "PositionButton", "LoopCheck", "TestButton" }
+                .All(name => Control<UIElement>(name).Visibility == Visibility.Collapsed), "disabled state hides all playback controls");
+            Toggle("PlayCheck", true);
+            Toggle("HoldCheck", true);
+            check(Mascot().Settings(MascotState.Completed).HoldUntilClick == true, "hold checkbox updates individual state");
+            Toggle("HoldCheck", false);
+            check(new LibraryStore(Path.Combine(dir, "state-settings.json")).Library.Installed.Single(m => m.Id == "original").Settings(MascotState.Completed).HoldUntilClick == false, "explicit hold off survives reload without default overriding it");
+            check(new[] { "VolumeInput", "SpeedInput", "DurationInput", "PositionButton", "LoopCheck", "TestButton" }
+                .All(name => Control<UIElement>(name).Visibility == Visibility.Visible), "enabling state restores playback controls");
+            Toggle("PlayCheck", false);
             dashboard.SavePosition("original", MascotState.Completed, 30, 60);
             check(Mascot().Settings(MascotState.Completed).Volume == 2 && Mascot().Settings(MascotState.Running).Volume == 1, "individual volume changes affect only selected state");
             var saved = new LibraryStore(Path.Combine(dir, "state-settings.json")).Library.Installed.Single(m => m.Id == "original");
@@ -36,12 +46,12 @@ internal static class LibrarySettingsTests
             var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
             if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(dashboard, Path.ChangeExtension(screenshot, ".state.png"));
             Click("StateSettingsButton");
-            check(volume.DisplayText == "?" && Control<NumericDragInput>("SpeedInput").DisplayText == "?", "whole scope shows question marks for mixed numeric values");
+            check(volume.DisplayText == "??" && Control<NumericDragInput>("SpeedInput").DisplayText == "??", "whole scope shows double question marks for mixed numeric values");
             check(Control<WrapPanel>("StatePlaybackOptions").Visibility == Visibility.Collapsed && dashboard.FindName("SoundCheck") is null && Control<Button>("PositionButton").Content.ToString()!.Contains('?'), "whole scope hides playback toggles and sound toggle is absent");
             if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(dashboard, Path.ChangeExtension(screenshot, ".mixed.png"));
             var mixedSnapshot = store.Snapshot();
             volume.BeginPointer(0); volume.MovePointer(40, false); volume.CancelEdit();
-            check(volume.DisplayText == "?" && store.Snapshot() == mixedSnapshot, "cancelled mixed numeric drag restores question mark without changing state settings");
+            check(volume.DisplayText == "??" && store.Snapshot() == mixedSnapshot, "cancelled mixed numeric drag restores double question marks without changing state settings");
             volume.CommitValue(1.25);
             check(CustomizationManager.States.All(s => Mascot().Settings(s).Volume == 1.25) && Mascot().Settings(MascotState.Completed).Speed == 1.5 && Mascot().Settings(MascotState.Running).Speed == 1, "whole-scope volume changes only that field across states");
             check(dashboard.TryHistoryGesture(Key.Z, ModifierKeys.Control) && Mascot().Settings(MascotState.Completed).Volume == 2 && Mascot().Settings(MascotState.Running).Volume == 1, "Ctrl Z restores mixed per-state values");

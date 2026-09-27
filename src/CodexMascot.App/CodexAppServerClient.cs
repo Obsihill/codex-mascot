@@ -73,7 +73,7 @@ public sealed class CodexAppServerClient : ICodexClient
             _ = DrainStderr(process, _lifetime.Token);
             try
             {
-                await Request("initialize", new { clientInfo = new { name = "codex_mascot", title = "Codex Mascot", version = "0.2.3" } }, ct);
+                await Request("initialize", new { clientInfo = new { name = "codex_mascot", title = AppBrand.Name, version = "0.2.3" } }, ct);
                 await Write(new { method = "initialized", @params = new { } }, ct);
             }
             catch { await StopAsync(); throw; }

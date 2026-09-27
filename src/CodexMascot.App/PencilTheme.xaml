@@ -1,6 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:CodexMascot.App">
- <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="PencilScrollBar.xaml"/></ResourceDictionary.MergedDictionaries>
+ <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="PencilScrollBar.xaml"/><ResourceDictionary Source="PencilWindow.xaml"/></ResourceDictionary.MergedDictionaries>
  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{x:Static local:PencilPalette.Ink}"/></Style>
  <Style TargetType="TextBox">
   <Setter Property="Foreground" Value="{x:Static local:PencilPalette.Ink}"/><Setter Property="Background" Value="{x:Static local:PencilPalette.Surface}"/>

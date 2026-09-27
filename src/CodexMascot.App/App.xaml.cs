@@ -24,13 +24,13 @@ public partial class App : System.Windows.Application
         _instance = new Mutex(true, @"Local\CodexMascot.v02", out _ownsInstance);
         if (!_ownsInstance)
         {
-            MessageBox.Show("Codex Mascot가 이미 실행 중입니다. 작업 표시줄의 숨겨진 아이콘에서 열어 주세요.", "Codex Mascot");
+            MessageBox.Show(AppBrand.Name + "가 이미 실행 중입니다. 작업 표시줄의 숨겨진 아이콘에서 열어 주세요.", AppBrand.Name);
             Shutdown(); return;
         }
         try { AppPaths.EnsureFolders(); base.OnStartup(e); }
         catch (Exception ex)
         {
-            MessageBox.Show("앱을 시작하지 못했습니다: " + ex.Message, "Codex Mascot");
+            MessageBox.Show("앱을 시작하지 못했습니다: " + ex.Message, AppBrand.Name);
             Shutdown(1);
         }
     }

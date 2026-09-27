@@ -12,6 +12,12 @@ internal sealed class MascotPresentationGroup : IDisposable
     public event EventHandler<string>? Feedback;
     public MascotState State { get; private set; }
     public bool IsPresenting => _active.Any(p => p.Overlay.IsPresenting);
+    internal bool HasHeldNotifications => _active.Any(p => p.Overlay.IsPresenting && p.Overlay.HoldUntilClick);
+    internal void DismissUnheld()
+    {
+        foreach (var entry in _active.Where(p => !p.Overlay.HoldUntilClick).ToArray())
+        { _active.Remove(entry); entry.Sound.Dispose(); entry.Overlay.Close(); }
+    }
     internal IReadOnlyList<OverlayWindow> Windows => _active.Select(p => p.Overlay).ToArray();
     internal static int CompletionVisibleMilliseconds(LibraryStore store, CustomizationManager manager) =>
         store.Library.Eligible(MascotState.Completed)
@@ -25,6 +31,7 @@ internal sealed class MascotPresentationGroup : IDisposable
         {
             var overlay = new OverlayWindow(); var player = new SoundPlayerService();
             var config = LibraryStore.Playback(mascot, state, manager.Configuration.For(state));
+            config.Sound = LibraryStore.ChooseSound(mascot, state);
             var placement = LibraryStore.Placement(mascot, manager.Configuration.Global, state);
             var media = store.MediaPath(mascot, manager, state);
             _active.Add(new(mascot.Id, overlay, player));
@@ -33,9 +40,8 @@ internal sealed class MascotPresentationGroup : IDisposable
             overlay.AudioError += (_, message) => Feedback?.Invoke(this, message);
             player.Feedback += (_, message) => Feedback?.Invoke(this, message);
             overlay.ApplyGlobal(placement);
-            overlay.ShowState(state, config, media, sound);
-            if (sound && placement.SoundEnabled && config.Volume > 0 && !MascotMedia.IsVideo(media) &&
-                state is MascotState.Completed or MascotState.Failed or MascotState.NeedsAttention)
+            overlay.ShowState(state, config, media, sound && string.IsNullOrWhiteSpace(config.Sound));
+            if (sound && placement.SoundEnabled && config.Volume > 0 && !string.IsNullOrWhiteSpace(config.Sound))
                 player.Play(manager.ResolveAsset(config.Sound), config.Volume * placement.MasterVolume, config.PlaybackSpeed);
         }
     }
@@ -53,6 +59,7 @@ internal sealed class MascotPresentationGroup : IDisposable
             if (mascot is null) continue;
             var global = LibraryStore.Placement(mascot, manager.Configuration.Global, State);
             entry.Overlay.ApplyGlobal(global);
+            entry.Overlay.ApplyHoldUntilClick(mascot.Settings(State).HoldUntilClick == true);
             entry.Sound.SetVolume(global.SoundEnabled ? mascot.Settings(State).Volume * global.MasterVolume : 0);
         }
     }

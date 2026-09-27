@@ -33,20 +33,23 @@ public partial class OverlayWindow : Window
     public string? LastImageError { get; private set; }
     public string? LastAudioError { get; private set; }
     public event EventHandler<string>? AudioError;
+    public event EventHandler? PlaybackCompleted;
+    public event EventHandler<string>? PlaybackFailed;
     internal bool HasBoostAudio => _videoAudio.IsPrepared;
     internal MascotState DisplayedState => _state;
     internal bool IsPresenting => IsVisible && !_hiding;
     public bool PlacementMode { get; set; }
-    private bool HoldUntilClick => _state == MascotState.NeedsAttention ||
-        (_state == MascotState.Completed && _global.KeepCompletedVisibleUntilClick);
+    internal bool HoldUntilClick => _stateConfiguration?.HoldUntilClick ?? (_state == MascotState.NeedsAttention ||
+        (_state == MascotState.Completed && _global.KeepCompletedVisibleUntilClick));
     private bool ClickThrough => _global.ClickThrough && !PlacementMode && !HoldUntilClick;
     public OverlayWindow()
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(WindowMessage);
         LocationChanged += (_, _) =>
         {
             if (_placementDragging && PlacementMode && !_closed)
-                PlacementPositionChanged?.Invoke(this, DesktopPosition);
+                PlacementPositionChanged?.Invoke(this, DesktopCenter);
         };
         _videoAudio.Feedback += (_, message) =>
         {
@@ -61,9 +64,11 @@ public partial class OverlayWindow : Window
         };
         MascotVideo.MediaEnded += (_, _) =>
         {
+            if (_closed || _hiding || MascotVideo.Source is null) return;
             _videoAudio.Stop();
             if (_loop && !_hiding && !_closed)
             { MascotVideo.Position = TimeSpan.Zero; StartVideoAudio(); MascotVideo.Play(); }
+            else PlaybackCompleted?.Invoke(this, EventArgs.Empty);
         };
         MascotVideo.MediaFailed += (_, e) =>
         {
@@ -198,7 +203,7 @@ public partial class OverlayWindow : Window
         _dragged = true;
         if (!PlacementMode || _closed) return false;
         PlacementDragStarted?.Invoke(this, EventArgs.Empty);
-        _placementStart = DesktopPosition; _placementDragging = true;
+        _placementStart = DesktopCenter; _placementDragging = true;
         return true;
     }
     internal Point DesktopPosition
@@ -209,17 +214,43 @@ public partial class OverlayWindow : Window
             return handle != IntPtr.Zero && GetWindowRect(handle, out var rect) ? new Point(rect.Left, rect.Top) : new Point();
         }
     }
+    internal void ApplyHoldUntilClick(bool hold)
+    {
+        if (_stateConfiguration is null || _stateConfiguration.HoldUntilClick == hold) return;
+        _stateConfiguration.HoldUntilClick = hold;
+        if (IsVisible) { ApplyStyles(); ScheduleAutoHide(); }
+    }
+    private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        // Mascots are not application windows: dragging to an edge, Win+Up or
+        // native maximize commands must never replace their configured size.
+        if (message == 0x0112 && (wParam.ToInt64() & 0xFFF0) == 0xF030) handled = true; // WM_SYSCOMMAND / SC_MAXIMIZE
+        return IntPtr.Zero;
+    }
+    // Image/video top margin is 18 DIPs; the fallback has the same 18-DIP
+    // top/bottom difference. Their visual center is 9 DIPs below the HWND center.
+    private const double MediaCenterOffsetY = 9;
+    internal Point DesktopCenter
+    {
+        get
+        {
+            var handle = new WindowInteropHelper(this).Handle;
+            return handle != IntPtr.Zero && GetWindowRect(handle, out var rect)
+                ? new Point((rect.Left + rect.Right) / 2d, (rect.Top + rect.Bottom) / 2d + MediaCenterOffsetY * VisualTreeHelper.GetDpi(this).DpiScaleY)
+                : new Point();
+        }
+    }
     internal void CompletePlacementDrag()
     {
         if (!_placementDragging) return;
         _placementDragging = false;
         if (_closed || !PlacementMode) return;
-        var point = DesktopPosition;
+        var point = DesktopCenter;
         PlacementPositionChanged?.Invoke(this, point);
         // Native DragMove restores the start position on Escape. Do not persist it
         // as a new custom position or add a history entry in that case.
         if (point == _placementStart) return;
-        _global.Position = "custom"; _global.CustomLeft = point.X; _global.CustomTop = point.Y;
+        _global.Position = "custom-center"; _global.CustomLeft = point.X; _global.CustomTop = point.Y;
         _global.MonitorDevice = Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).DeviceName;
         PositionSaved?.Invoke(this, EventArgs.Empty);
     }
@@ -244,6 +275,7 @@ public partial class OverlayWindow : Window
         MascotImage.Visibility = Visibility.Collapsed; FallbackCard.Visibility = Visibility.Visible;
         FallbackEmoji.Text = _state switch { MascotState.Running => "⚙", MascotState.Completed => "★", MascotState.Failed => "!", MascotState.NeedsAttention => "?", MascotState.Interrupted => "Ⅱ", _ => "●" };
         FallbackText.Text = MainWindow.StateName(_state);
+        PlaybackFailed?.Invoke(this, message);
     }
     private void Fade(double opacity, int ms)
     {
@@ -254,7 +286,7 @@ public partial class OverlayWindow : Window
         BeginAnimation(OpacityProperty, fade);
     }
     private Forms.Screen GetScreen() => GetScreen(_global);
-    private static Forms.Screen GetScreen(GlobalConfiguration config) => config.Position == "custom" && config.CustomLeft is not null && config.CustomTop is not null
+    private static Forms.Screen GetScreen(GlobalConfiguration config) => config.Position is "custom" or "custom-center" && config.CustomLeft is not null && config.CustomTop is not null
         ? Forms.Screen.FromPoint(new System.Drawing.Point((int)config.CustomLeft.Value, (int)config.CustomTop.Value))
         : Forms.Screen.AllScreens.FirstOrDefault(s => s.DeviceName == config.MonitorDevice)
         ?? Forms.Screen.PrimaryScreen ?? Forms.Screen.AllScreens[0];
@@ -267,13 +299,36 @@ public partial class OverlayWindow : Window
     internal static System.Drawing.Rectangle PlacementBounds(GlobalConfiguration config)
     {
         var area = GetScreen(config).WorkingArea;
+        return CalculatePlacementBounds(config, area, MonitorScale(area));
+    }
+    internal static Point PlacementCenter(GlobalConfiguration config)
+    {
+        var area = GetScreen(config).WorkingArea;
+        var dpi = MonitorScale(area);
+        var bounds = CalculatePlacementBounds(config, area, dpi);
+        return new Point(bounds.Left + bounds.Width / 2d, bounds.Top + bounds.Height / 2d + MediaCenterOffsetY * dpi);
+    }
+    private static double MonitorScale(System.Drawing.Rectangle area)
+    {
         uint dpi = 96;
         var point = new NativePoint { X = area.Left + 1, Y = area.Top + 1 };
         try { if (GetDpiForMonitor(MonitorFromPoint(point, 2), 0, out var dx, out _) == 0) dpi = dx; }
         catch (DllNotFoundException) { }
-        var w = Math.Min(area.Width, (int)(260 * Math.Clamp(config.Scale, .4, 3) * dpi / 96));
-        var h = Math.Min(area.Height, (int)(280 * Math.Clamp(config.Scale, .4, 3) * dpi / 96));
-        var margin = (int)(24 * dpi / 96);
+        return dpi / 96d;
+    }
+    internal static System.Drawing.Rectangle CalculatePlacementBounds(GlobalConfiguration config, System.Drawing.Rectangle area, double dpi)
+    {
+        var w = Math.Min(area.Width, (int)(260 * Math.Clamp(config.Scale, .4, 3) * dpi));
+        var h = Math.Min(area.Height, (int)(280 * Math.Clamp(config.Scale, .4, 3) * dpi));
+        var margin = (int)(24 * dpi);
+        if (config.Position == "custom-center")
+        {
+            // Keep the anchor fixed even near an edge; do not push the whole
+            // rectangle inward when it grows. Off-screen anchors remain reachable.
+            var cx = Math.Clamp(config.CustomLeft ?? area.Left + area.Width / 2d, area.Left, area.Right - 1);
+            var cy = Math.Clamp(config.CustomTop ?? area.Top + area.Height / 2d, area.Top, area.Bottom - 1);
+            return new System.Drawing.Rectangle((int)Math.Round(cx - w / 2d), (int)Math.Round(cy - h / 2d - MediaCenterOffsetY * dpi), w, h);
+        }
         var (x, y) = config.Position switch
         {
             "top-left" => (area.Left + margin, area.Top + margin),

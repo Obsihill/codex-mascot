@@ -14,7 +14,7 @@ internal static class LibraryImportDurationTests
         var context = SynchronizationContext.Current;
         try
         {
-            var source = new LibraryStore(Path.Combine(dir, "import-source.json"));
+            var source = TestLibrary.Create(Path.Combine(dir, "import-source.json"));
             var cat = source.Library.Installed.Single(m => m.Id == "cat");
             cat.Settings(MascotState.Completed).Volume = 1.7;
             cat.Settings(MascotState.Completed).ImageDurationMs = 2700;
@@ -81,7 +81,7 @@ internal static class LibraryImportDurationTests
     }
     private static void Registration(Action<bool, string> check, string dir, string folder)
     {
-        var file = Path.Combine(dir, "import-ui.json"); var store = new LibraryStore(file);
+        var file = Path.Combine(dir, "import-ui.json"); var store = TestLibrary.Create(file);
         var dashboard = new LibraryDashboard(); dashboard.Initialize(store, new CustomizationManager());
         var host = new Window { Content = dashboard, Width = 1220, Height = 900, ShowActivated = false, ShowInTaskbar = false };
         try
@@ -121,7 +121,7 @@ internal static class LibraryImportDurationTests
     }
     private static void Duration(Action<bool, string> check, string dir)
     {
-        var file = Path.Combine(dir, "image-duration.json"); var store = new LibraryStore(file); var manager = new CustomizationManager();
+        var file = Path.Combine(dir, "image-duration.json"); var store = TestLibrary.Create(file); var manager = new CustomizationManager();
         var dashboard = new LibraryDashboard(); dashboard.Initialize(store, manager);
         var host = new Window { Content = dashboard, Width = 1220, Height = 900, ShowActivated = false, ShowInTaskbar = false };
         try
@@ -181,8 +181,12 @@ internal static class LibraryImportDurationTests
             group.Show(store, manager, MascotState.Failed, false);
             Pump(700); check(!group.IsPresenting, "live image notification hides after its per-mascot duration");
             Mascot().Settings(MascotState.NeedsAttention).ImageDurationMs = 200;
+            Mascot().Settings(MascotState.NeedsAttention).HoldUntilClick = true;
             group.Show(store, manager, MascotState.NeedsAttention, false);
-            Pump(700); check(group.IsPresenting, "approval-required notifications still wait for a click despite image duration");
+            Pump(700); check(group.IsPresenting, "checked approval notification waits for a click despite image duration");
+            Mascot().Settings(MascotState.NeedsAttention).HoldUntilClick = false;
+            group.ApplyPreferences(store, manager);
+            Pump(700); check(!group.IsPresenting, "unchecking approval hold restores the image timeout");
         }
         finally { dashboard.Shutdown(); host.Close(); }
     }

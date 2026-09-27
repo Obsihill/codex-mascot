@@ -40,16 +40,21 @@ internal static class MascotFolderImport
         mascot.States = mascot.States.Where(p => keys.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value);
         mascot.Events = (mascot.Events ?? new()).Where(keys.Contains).Distinct().ToList();
         mascot.Volume = Clamp(mascot.Volume, 0, 2, 1); mascot.Speed = Clamp(mascot.Speed, .25, 3, 1);
+        mascot.Scale = mascot.Scale is { } scale ? Clamp(scale, .4, 3, 1) : null;
         mascot.CustomLeft = Coordinate(mascot.CustomLeft); mascot.CustomTop = Coordinate(mascot.CustomTop);
         foreach (var state in CustomizationManager.States)
         {
             var media = mascot.For(state);
             media.Image = ResolveMedia(root, media.Image, MainWindow.StateName(state), false);
+            if (!string.IsNullOrWhiteSpace(media.Sound)) media.Sound = ResolveMedia(root, media.Sound, MainWindow.StateName(state) + " 소리", false, true);
+            else media.Sound = null;
+            media.Sounds = (media.Sounds ?? new()).Select(s => ResolveMedia(root, s, MainWindow.StateName(state) + " 소리", false, true)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             media.SpriteColumns = Math.Clamp(media.SpriteColumns, 1, 32); media.SpriteRows = Math.Clamp(media.SpriteRows, 1, 32);
             media.FrameDurationMs = Math.Clamp(media.FrameDurationMs, 20, 5000);
             var settings = mascot.Settings(state);
             settings.Volume = media.SoundEnabled ? Clamp(settings.Volume, 0, 2, 1) : 0; media.SoundEnabled = true;
             settings.Speed = Clamp(settings.Speed, .25, 3, 1);
+            settings.Scale = settings.Scale is { } stateScale ? Clamp(stateScale, .4, 3, 1) : null;
             if (settings.ImageDurationMs is { } duration) settings.ImageDurationMs = Math.Clamp(duration, 0, 600000);
             settings.CustomLeft = Coordinate(settings.CustomLeft); settings.CustomTop = Coordinate(settings.CustomTop);
         }
@@ -57,7 +62,7 @@ internal static class MascotFolderImport
     }
     private static double Clamp(double value, double min, double max, double fallback) => double.IsFinite(value) ? Math.Clamp(value, min, max) : fallback;
     private static double? Coordinate(double? value) => value is { } n && double.IsFinite(n) ? Math.Clamp(n, int.MinValue, int.MaxValue) : null;
-    private static string ResolveMedia(string root, string? relative, string label, bool cover)
+    private static string ResolveMedia(string root, string? relative, string label, bool cover, bool sound = false)
     {
         if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Contains(':'))
             throw new InvalidDataException(label + ": 폴더 안의 상대 경로가 필요합니다.");
@@ -70,6 +75,7 @@ internal static class MascotFolderImport
         if (!File.Exists(path)) throw new FileNotFoundException(label + ": 파일을 찾을 수 없습니다. (" + relative + ")");
         var current = root;
         foreach (var part in normalized.Split('/', StringSplitOptions.RemoveEmptyEntries)) { current = Path.Combine(current, part); RejectLink(current); }
+        if (sound) { MascotPackageEditor.ValidateSound(path); return path; }
         var extension = Path.GetExtension(path).ToLowerInvariant();
         if (extension is not (".png" or ".gif" or ".webp") && (cover || !MascotMedia.IsVideo(path)))
             throw new InvalidDataException(label + ": 지원하지 않는 이미지·영상 형식입니다.");

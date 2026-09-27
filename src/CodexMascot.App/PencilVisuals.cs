@@ -5,12 +5,12 @@ using System.Windows.Media;
 
 namespace CodexMascot.App;
 
-public enum PencilIconKind { None, Volume, Speed, Play, Stop, Settings, Duration, Position, Loop, Add, Remove, Delete, Reset, Back, Folder, ChevronDown }
+public enum PencilIconKind { None, Volume, Speed, Play, Stop, Settings, Duration, Position, Loop, Add, Remove, Delete, Reset, Back, Folder, ChevronDown, Minimize, Maximize, Restore, Close }
 
 public static class PencilFonts
 {
     // Embedded, not dependent on machine-installed fonts or network access.
-    public static FontFamily Handwriting { get; } = new(new Uri("pack://application:,,,/CodexMascot.App;component/"), "./Fonts/#Nanum Pen Script");
+    public static FontFamily Handwriting { get; } = new(new Uri("pack://application:,,,/AgentMascot;component/"), "./Fonts/#Nanum Pen Script");
     public static FontFamily Numbers { get; } = new("Segoe UI");
 }
 
@@ -30,6 +30,7 @@ public static class PencilPalette
     public static SolidColorBrush Emphasis { get; } = Brush("#252A22");
     public static SolidColorBrush Surface { get; } = Brush("#FCFAF4");
     public static SolidColorBrush Inset { get; } = Brush("#F0EEE5");
+    public static SolidColorBrush ValueFill { get; } = Brush("#D8D5CC");
     public static SolidColorBrush Accent { get; } = Brush("#587461");
     public static SolidColorBrush Selected { get; } = Brush("#E7ECDF");
     public static SolidColorBrush Danger { get; } = Brush("#97605A");
@@ -157,6 +158,10 @@ internal static class PencilGeometry
             PencilIconKind.Back => "M27,16 L5,16 M13,8 L5,16 13,24",
             PencilIconKind.Folder => "M3,9 L3,26 29,26 29,10 17,10 14,6 3,6 Z",
             PencilIconKind.ChevronDown => "M8,12 L16,20 24,12",
+            PencilIconKind.Minimize => "M6,23 L26,23",
+            PencilIconKind.Maximize => "M6,6 L26,6 26,26 6,26 Z",
+            PencilIconKind.Restore => "M11,10 L11,5 27,5 27,21 23,21 M5,11 L21,11 21,27 5,27 Z",
+            PencilIconKind.Close => "M7,7 L25,25 M25,7 L7,25",
             _ => ""
         };
         if (path.Length == 0) return Geometry.Empty;

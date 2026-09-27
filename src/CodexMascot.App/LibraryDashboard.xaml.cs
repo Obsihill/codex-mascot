@@ -21,6 +21,10 @@ public partial class LibraryDashboard : UserControl
     private int _previewFrame;
     private Window? _editorDialog;
     private OverlayWindow? _testOverlay;
+    private readonly Queue<MascotState> _testStates = new();
+    private LibraryMascot? _testMascot;
+    private bool _testAll;
+    internal MascotState? TestingState => _testOverlay?.DisplayedState;
     private readonly SoundPlayerService _testSound = new();
     private readonly DispatcherTimer _testTimeout = new() { Interval = TimeSpan.FromSeconds(10) };
     public event EventHandler? SettingsRequested;
@@ -33,6 +37,7 @@ public partial class LibraryDashboard : UserControl
     public LibraryDashboard()
     {
         InitializeComponent();
+        if (System.ComponentModel.DesignerProperties.GetIsInDesignMode(this)) return;
         PreviewState.DisplayMemberPath = nameof(PreviewChoice.Name);
         foreach (var state in CustomizationManager.States) PreviewState.Items.Add(new PreviewChoice(MainWindow.StateName(state), state));
         PreviewState.SelectedIndex = 3;
@@ -46,7 +51,8 @@ public partial class LibraryDashboard : UserControl
         };
         PreviewVideo.MediaEnded += (_, _) => { if (_current?.Settings(PreviewEvent).Loop == true && IsVisible) { PreviewVideo.Position = TimeSpan.Zero; PreviewVideo.Play(); } };
         PreviewVideo.MediaFailed += (_, e) => { if (PreviewVideo.Source is not null) ShowError(e.ErrorException.Message); };
-        _testTimeout.Tick += (_, _) => StopTest();
+        _testTimeout.Tick += (_, _) => AdvanceTest();
+        _testSound.Feedback += (_, message) => Feedback.Text = message;
         IsVisibleChanged += (_, _) => { if (!IsVisible) { StopPreview(); StopTest(); } else if (_current is not null) ShowPreview(); };
         Unloaded += (_, _) => { StopPreview(); StopTest(); };
     }
@@ -282,27 +288,53 @@ public partial class LibraryDashboard : UserControl
     private void RunTest()
     {
         if (_current is null) return;
-        StopTest(); var mascot = _current;
-        var global = LibraryStore.Placement(mascot, _manager.Configuration.Global, PreviewEvent);
+        StopTest(); _testMascot = _current; _testAll = _activeState is null;
+        foreach (var state in _activeState is { } selected ? new[] { selected } : CustomizationManager.States) _testStates.Enqueue(state);
+        AdvanceTest();
+    }
+    internal void AdvanceTest()
+    {
+        _testTimeout.Stop(); _testSound.Stop();
+        var previous = _testOverlay; _testOverlay = null; previous?.Close();
+        if (_testMascot is null || !_testStates.TryDequeue(out var state))
+        { var completed = _testMascot is not null && _testAll; StopTest(); if (completed) Feedback.Text = "전체 테스트 완료"; return; }
+        var mascot = _testMascot;
+        var global = LibraryStore.Placement(mascot, _manager.Configuration.Global, state);
         global.KeepCompletedVisibleUntilClick = false; global.ClickThrough = false;
         _testOverlay = new OverlayWindow();
+        var overlay = _testOverlay;
+        // Queue completion so media callbacks cannot close a window during ShowState.
+        // An old callback must never stop a newer test.
+        void FinishTest() => Dispatcher.BeginInvoke(new Action(() =>
+        { if (ReferenceEquals(_testOverlay, overlay)) AdvanceTest(); }));
+        overlay.PlaybackCompleted += (_, _) => FinishTest();
+        overlay.PlaybackFailed += (_, message) =>
+        {
+            Dispatcher.BeginInvoke(new Action(() => { if (ReferenceEquals(_testOverlay, overlay)) { StopTest(); Feedback.Text = message; } }));
+        };
         _testOverlay.AudioError += (_, message) => Feedback.Text = message;
         _testOverlay.ApplyGlobal(global); _testOverlay.Clicked += (_, _) => StopTest();
-        var state = PreviewEvent;
         var cfg = LibraryStore.Playback(mascot, state, _manager.Configuration.For(state));
+        if (_testAll) cfg.Loop = false; // Every state must finish before advancing.
+        cfg.Sound = LibraryStore.ChooseSound(mascot, state);
         var path = _store.MediaPath(mascot, _manager, state);
-        _testTimeout.Interval = TimeSpan.FromMilliseconds(!MascotMedia.IsVideo(path) && cfg.ShowDurationMs > 0 ? Math.Clamp(cfg.ShowDurationMs, 200, 10000) : 10000);
+        var video = MascotMedia.IsVideo(path);
+        if (!video) _testTimeout.Interval = TimeSpan.FromMilliseconds(cfg.ShowDurationMs > 0 ? Math.Clamp(cfg.ShowDurationMs, 200, 10000) : _testAll ? 2000 : 10000);
         cfg.ShowDurationMs = 0; // The owner timer closes the test and resets the toggle together.
         var sound = mascot.For(state).SoundEnabled;
-        _testOverlay.ShowState(state, cfg, path, sound);
-        if (sound && !MascotMedia.IsVideo(path) && global.SoundEnabled)
+        _testOverlay.ShowState(state, cfg, path, sound && string.IsNullOrWhiteSpace(cfg.Sound));
+        if (sound && !string.IsNullOrWhiteSpace(cfg.Sound) && global.SoundEnabled && cfg.Volume > 0)
             _testSound.Play(_manager.ResolveAsset(cfg.Sound), cfg.Volume * global.MasterVolume, cfg.PlaybackSpeed);
         TestButton.Content = "중지"; Pencil.SetIcon(TestButton, PencilIconKind.Stop);
-        System.Windows.Automation.AutomationProperties.SetName(TestButton, "중지"); _testTimeout.Start();
+        System.Windows.Automation.AutomationProperties.SetName(TestButton, "중지");
+        if (_testAll) Feedback.Text = "전체 테스트 · " + MainWindow.StateName(state);
+        if (!video) _testTimeout.Start();
     }
     public void StopTest()
     {
-        _testTimeout.Stop(); _testSound.Stop(); _testOverlay?.Close(); _testOverlay = null;
+        if (_testMascot is not null && _testAll && Feedback.Text.StartsWith("전체 테스트 ·", StringComparison.Ordinal)) Feedback.Text = "전체 테스트 중지";
+        _testStates.Clear(); _testMascot = null;
+        _testTimeout.Stop(); _testSound.Stop(); var overlay = _testOverlay; _testOverlay = null; overlay?.Close();
         TestButton.Content = "테스트"; Pencil.SetIcon(TestButton, PencilIconKind.Play);
         System.Windows.Automation.AutomationProperties.SetName(TestButton, "테스트");
     }
@@ -329,6 +361,7 @@ public partial class LibraryDashboard : UserControl
             ResizeMode = ResizeMode.NoResize, Owner = Window.GetWindow(this), WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = PencilPalette.Paper, Foreground = PencilPalette.Ink, Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
         window.Resources = Resources; window.PreviewKeyDown += History_OnKeyDown;
+        PencilWindow.Apply(window);
         _editorDialog = window; window.Closed += (_, _) => _editorDialog = null; return window;
     }
 }

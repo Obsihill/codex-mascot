@@ -18,17 +18,23 @@ public sealed class NumericDragInput : UserControl
         FontFamily = PencilFonts.Numbers, FontSize = 13, Padding = new Thickness(0), BorderThickness = new Thickness(0), Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center };
     private bool _pointer, _dragging, _editing, _startMixed, _invalid;
     private double _startX, _lastX, _startValue, _accumulator;
+    private double _fillFraction = double.NaN;
+    private Brush _fillBrush = PencilPalette.Surface;
 
     public static readonly DependencyProperty ValueProperty = DependencyProperty.Register(nameof(Value), typeof(double), typeof(NumericDragInput), new PropertyMetadata(0d, RenderChanged));
     public static readonly DependencyProperty IsMixedProperty = DependencyProperty.Register(nameof(IsMixed), typeof(bool), typeof(NumericDragInput), new PropertyMetadata(false, RenderChanged));
     public static readonly DependencyProperty LabelProperty = DependencyProperty.Register(nameof(Label), typeof(string), typeof(NumericDragInput), new PropertyMetadata("", RenderChanged));
     public static readonly DependencyProperty IconProperty = DependencyProperty.Register(nameof(Icon), typeof(PencilIconKind), typeof(NumericDragInput), new PropertyMetadata(PencilIconKind.None, RenderChanged));
+    public static readonly DependencyProperty ShowValueFillProperty = DependencyProperty.Register(nameof(ShowValueFill), typeof(bool), typeof(NumericDragInput), new PropertyMetadata(false, RenderChanged));
+    public static readonly DependencyProperty MinimumProperty = DependencyProperty.Register(nameof(Minimum), typeof(double), typeof(NumericDragInput), new PropertyMetadata(double.MinValue, RenderChanged));
+    public static readonly DependencyProperty MaximumProperty = DependencyProperty.Register(nameof(Maximum), typeof(double), typeof(NumericDragInput), new PropertyMetadata(double.MaxValue, RenderChanged));
     public PencilIconKind Icon { get => (PencilIconKind)GetValue(IconProperty); set => SetValue(IconProperty, value); }
     public double Value { get => (double)GetValue(ValueProperty); set => SetValue(ValueProperty, value); }
     public bool IsMixed { get => (bool)GetValue(IsMixedProperty); set => SetValue(IsMixedProperty, value); }
     public string Label { get => (string)GetValue(LabelProperty); set => SetValue(LabelProperty, value); }
-    public double Minimum { get; set; } = double.MinValue;
-    public double Maximum { get; set; } = double.MaxValue;
+    public bool ShowValueFill { get => (bool)GetValue(ShowValueFillProperty); set => SetValue(ShowValueFillProperty, value); }
+    public double Minimum { get => (double)GetValue(MinimumProperty); set => SetValue(MinimumProperty, value); }
+    public double Maximum { get => (double)GetValue(MaximumProperty); set => SetValue(MaximumProperty, value); }
     public double DisplayScale { get; set; } = 1;
     public int DecimalPlaces { get; set; }
     // Expressed in display units, e.g. 0.5 percent or 1 desktop pixel per DIP.
@@ -40,6 +46,7 @@ public sealed class NumericDragInput : UserControl
     internal bool IsScrubbing => _pointer;
     internal string DisplayText => _display.Text;
     internal TextBox Editor => _editor;
+    internal double ValueFillFraction => _fillFraction;
 
     public NumericDragInput()
     {
@@ -68,12 +75,32 @@ public sealed class NumericDragInput : UserControl
     private void Render()
     {
         if (_surface is null) return;
-        _label.Text = Label; _display.Text = IsMixed ? "?" : Number(Value) + Suffix;
+        _label.Text = Label; _display.Text = IsMixed ? "??" : Number(Value) + Suffix;
         _icon.Kind = Icon; _icon.Visibility = Icon == PencilIconKind.None ? Visibility.Collapsed : Visibility.Visible;
-        _surface.Background = PencilPalette.Surface;
+        _surface.Background = ValueBackground();
         _surface.BorderBrush = _invalid ? Brushes.Firebrick : IsEnabled && IsMouseOver ? PencilPalette.Emphasis : IsKeyboardFocusWithin ? PencilPalette.Accent : PencilPalette.Line;
         ToolTip = _invalid ? "올바른 숫자를 입력하세요." : null;
         System.Windows.Automation.AutomationProperties.SetName(this, Label);
+    }
+    private Brush ValueBackground()
+    {
+        var range = Maximum - Minimum;
+        var fraction = ShowValueFill && !IsMixed && double.IsFinite(Value) && double.IsFinite(range) && range > 0
+            ? Math.Clamp((Value - Minimum) / range, 0, 1) : 0;
+        // Reuse the brush on hover/focus. Only the outline should change then.
+        if (_fillFraction == fraction) return _fillBrush;
+        _fillFraction = fraction;
+        if (fraction == 0) return _fillBrush = PencilPalette.Surface;
+        if (fraction == 1) return _fillBrush = PencilPalette.ValueFill;
+        // Coincident stops make a crisp rectangle, not a fading gradient.
+        // Relative coordinates automatically track the field's width on resize.
+        var brush = new LinearGradientBrush { StartPoint = new Point(0, .5), EndPoint = new Point(1, .5) };
+        brush.GradientStops.Add(new GradientStop(PencilPalette.ValueFill.Color, 0));
+        brush.GradientStops.Add(new GradientStop(PencilPalette.ValueFill.Color, fraction));
+        brush.GradientStops.Add(new GradientStop(PencilPalette.Surface.Color, fraction));
+        brush.GradientStops.Add(new GradientStop(PencilPalette.Surface.Color, 1));
+        brush.Freeze();
+        return _fillBrush = brush;
     }
     private double Normalize(double value) => Math.Clamp(Math.Round(Math.Clamp(value, Minimum, Maximum) * DisplayScale, DecimalPlaces) / DisplayScale, Minimum, Maximum);
     private void RememberStart() { _startValue = Value; _startMixed = IsMixed; _invalid = false; }
