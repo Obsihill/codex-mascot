@@ -5,6 +5,7 @@
  ShowInTaskbar="False" ShowActivated="False" Topmost="True" Width="260" Height="280">
  <Grid Background="Transparent" Margin="8">
   <Image x:Name="MascotImage" Margin="0,18,0,0" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+  <MediaElement x:Name="MascotVideo" Margin="0,18,0,0" Stretch="Uniform" Visibility="Collapsed" LoadedBehavior="Manual" UnloadedBehavior="Close" IsHitTestVisible="False"/>
   <Border x:Name="FallbackCard" Background="#E6233247" CornerRadius="24" Visibility="Collapsed" Margin="12,30,12,12">
    <StackPanel VerticalAlignment="Center"><TextBlock x:Name="FallbackEmoji" Text="★" FontSize="68" Foreground="#70D6FF" HorizontalAlignment="Center"/>
     <TextBlock x:Name="FallbackText" Foreground="White" FontSize="16" TextAlignment="Center"/></StackPanel>

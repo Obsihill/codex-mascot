@@ -37,7 +37,7 @@ public sealed class CustomizationManager
             if (!Configuration.States.TryGetValue(key, out var cfg) || cfg is null)
                 Configuration.States[key] = cfg = new MascotConfiguration().For(state);
             cfg.ShowDurationMs = Math.Clamp(cfg.ShowDurationMs, 0, 600000);
-            cfg.Volume = Math.Clamp(cfg.Volume, 0, 1);
+            cfg.Volume = Math.Clamp(cfg.Volume, 0, 2);
             cfg.SpriteColumns = Math.Clamp(cfg.SpriteColumns, 1, 32); cfg.SpriteRows = Math.Clamp(cfg.SpriteRows, 1, 32);
             cfg.FrameDurationMs = Math.Clamp(cfg.FrameDurationMs, 20, 5000);
         }
