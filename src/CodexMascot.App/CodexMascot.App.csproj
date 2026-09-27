@@ -9,7 +9,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.2.1</Version>
+    <Version>0.2.3</Version>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Fonts\NanumPenScript-Regular.ttf" />
