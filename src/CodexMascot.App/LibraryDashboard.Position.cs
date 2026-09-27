@@ -19,8 +19,8 @@ public partial class LibraryDashboard
         var coordinates = new Grid();
         foreach (var width in new[] { new GridLength(1, GridUnitType.Star), new GridLength(18), new GridLength(1, GridUnitType.Star) })
             coordinates.ColumnDefinitions.Add(new ColumnDefinition { Width = width });
-        var x = new NumericDragInput { Name = "PositionX", Label = "X", Value = bounds.Left, Minimum = int.MinValue, Maximum = int.MaxValue };
-        var y = new NumericDragInput { Name = "PositionY", Label = "Y", Value = bounds.Top, Minimum = int.MinValue, Maximum = int.MaxValue };
+        var x = new NumericDragInput { Name = "PositionX", Label = "X", Icon = PencilIconKind.Position, Value = bounds.Left, Minimum = int.MinValue, Maximum = int.MaxValue };
+        var y = new NumericDragInput { Name = "PositionY", Label = "Y", Icon = PencilIconKind.Position, Value = bounds.Top, Minimum = int.MinValue, Maximum = int.MaxValue };
         Grid.SetColumn(y, 2);
         coordinates.Children.Add(x); coordinates.Children.Add(y);
         panel.Children.Add(coordinates);

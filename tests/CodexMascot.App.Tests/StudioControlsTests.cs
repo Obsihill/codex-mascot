@@ -153,7 +153,7 @@ internal static class StudioControlsTests
             var second = store.Library.Selected.Last().Id;
             check(first != second && store.Library.Selected.Count == initialCount + 2, "repeated plus clicks create independent copies");
             var minus = CardButton(selected, first, "CardRemoveButton");
-            check(minus.IsVisible && minus.Parent is Grid thumbnail && thumbnail.Height == 64 && minus.HorizontalAlignment == HorizontalAlignment.Right && minus.VerticalAlignment == VerticalAlignment.Top, "minus is on the selected thumbnail, not the footer");
+            check(minus.IsVisible && minus.Parent is Grid thumbnail && thumbnail.Children.OfType<Image>().Any() && Grid.GetRow(minus) == 0 && minus.HorizontalAlignment == HorizontalAlignment.Right && minus.VerticalAlignment == VerticalAlignment.Top, "minus remains at the upper-right of the selected portrait card");
             minus.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             check(store.Library.Find(first) is null && store.Library.Find(second) is not null && store.Library.Installed.Any(m => m.Id == "bot"), "minus removes its exact duplicate, not the currently inspected copy or installed package");
             dashboard.ReplayHistory(false);

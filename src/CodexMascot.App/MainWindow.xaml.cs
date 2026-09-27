@@ -409,8 +409,8 @@ public partial class MainWindow : Window
         ShellRoot.Children.Remove(WorkspacePanel);
         WorkspacePanel.Visibility = Visibility.Visible;
         _workspaceSettings = new Window { Title = "Mascot · 앱 설정", Width = 1000, Height = 800, MinWidth = 780, MinHeight = 600,
-            MaxHeight = SystemParameters.WorkArea.Height, Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(17,25,37)),
-            Foreground = System.Windows.Media.Brushes.White, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = WorkspacePanel };
+            MaxHeight = SystemParameters.WorkArea.Height, Background = PencilPalette.Paper,
+            Foreground = PencilPalette.Ink, Resources = Resources, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = WorkspacePanel };
         _workspaceSettings.Closed += (_, _) =>
         {
             _workspaceSettings.Content = null; _workspaceSettings = null;

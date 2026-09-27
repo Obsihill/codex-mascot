@@ -123,9 +123,9 @@ internal static class LibraryFeatureTests
             check(positioned.Position == "custom" && positioned.CustomLeft == -120 && positioned.CustomTop == 240, "position dialog persists signed desktop coordinates");
             var toggle = (Button)dashboard.FindName("TestButton");
             toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            check(dashboard.IsTesting && (string)toggle.Content == "■ 중지", "test button toggles into stop while playing");
+            check(dashboard.IsTesting && (string)toggle.Content == "중지" && Pencil.GetIcon(toggle) == PencilIconKind.Stop, "test button switches both label and pencil icon into stop while playing");
             toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            check(!dashboard.IsTesting && (string)toggle.Content == "▶ 테스트", "same button stops and resets test");
+            check(!dashboard.IsTesting && (string)toggle.Content == "테스트" && Pencil.GetIcon(toggle) == PencilIconKind.Play, "same button stops and resets test label and pencil icon");
             var videoFixture = Environment.GetEnvironmentVariable("MASCOT_VIDEO_TEST_FILE");
             if (!string.IsNullOrWhiteSpace(videoFixture))
             {

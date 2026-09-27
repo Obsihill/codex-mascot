@@ -24,7 +24,9 @@ internal sealed class MascotPackageEditor : Window
         Title = original is null ? "마스코트 등록" : "이미지 구성";
         Width = 520; SizeToContent = SizeToContent.Height; MaxHeight = SystemParameters.WorkArea.Height - 40;
         ResizeMode = ResizeMode.NoResize; WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = Brushes.White; Foreground = new SolidColorBrush(Color.FromRgb(38, 50, 64));
+        Background = PencilPalette.Paper; Foreground = PencilPalette.Ink;
+        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/CodexMascot.App;component/PencilTheme.xaml", UriKind.Relative) });
+        Pencil.SetIcon(_importButton, PencilIconKind.Add);
         var root = new StackPanel { Margin = new Thickness(24) };
         Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         var panel = new StackPanel { Margin = new Thickness(8, 16, 8, 0) };
@@ -42,6 +44,7 @@ internal sealed class MascotPackageEditor : Window
         foreach (var state in CustomizationManager.States)
             AddSlot(panel, MascotConfiguration.StateKey(state), MainWindow.StateName(state), original?.For(state).Image);
         var save = new Button { Content = original is null ? "등록" : "저장" };
+        Pencil.SetIcon(save, PencilIconKind.Add);
         save.Click += (_, _) =>
         {
             try { Result = BuildPackage(_name.Text, _paths, _changed, _manager, _original); DialogResult = true; }
@@ -54,6 +57,7 @@ internal sealed class MascotPackageEditor : Window
     {
         var panel = new StackPanel { Margin = new Thickness(8, 16, 8, 0) };
         var pick = new Button { Name = "ChooseLibraryFolderButton", Content = "라이브러리 폴더 선택" };
+        Pencil.SetIcon(pick, PencilIconKind.Folder);
         pick.Click += (_, _) =>
         {
             var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "mascot.json이 있는 마스코트 폴더 선택", Multiselect = false };
@@ -61,12 +65,14 @@ internal sealed class MascotPackageEditor : Window
         };
         panel.Children.Add(pick);
         var preview = new StackPanel(); preview.Children.Add(_libraryPreview); preview.Children.Add(_libraryName);
-        preview.Children.Add(new TextBlock { Text = "폴더 또는 mascot.json 놓기", TextAlignment = TextAlignment.Center, Foreground = Brushes.SlateGray, Margin = new Thickness(0, 0, 0, 12) });
-        var drop = new Border { Name = "LibraryImportDropZone", Child = preview, Background = new SolidColorBrush(Color.FromRgb(244, 246, 248)), BorderBrush = Brushes.LightGray,
+        preview.Children.Add(new TextBlock { Text = "폴더 또는 mascot.json 놓기", TextAlignment = TextAlignment.Center, Foreground = PencilPalette.Muted, Margin = new Thickness(0, 0, 0, 12) });
+        var drop = new PencilBorder { Name = "LibraryImportDropZone", Child = preview, Background = PencilPalette.Surface, BorderBrush = PencilPalette.Line,
             BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), AllowDrop = true, Margin = new Thickness(0, 16, 0, 0) };
-        drop.DragOver += (_, e) => { e.Effects = e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
+        drop.DragOver += (_, e) => { e.Effects = e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } ? DragDropEffects.Copy : DragDropEffects.None; drop.BorderBrush = e.Effects == DragDropEffects.Copy ? PencilPalette.Emphasis : PencilPalette.Line; e.Handled = true; };
+        drop.DragLeave += (_, _) => drop.BorderBrush = PencilPalette.Line;
         drop.Drop += (_, e) =>
         {
+            drop.BorderBrush = PencilPalette.Line;
             e.Handled = true;
             if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } files) LoadLibrary(files[0]);
             else _error.Text = "마스코트 폴더를 하나씩 선택하세요.";
@@ -97,7 +103,7 @@ internal sealed class MascotPackageEditor : Window
         var row = new Grid { Margin = new Thickness(0, 0, 0, 10) };
         row.ColumnDefinitions.Add(new() { Width = new GridLength(62) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         var image = new Image { Height = 54, Width = 54, Stretch = Stretch.Uniform };
-        var box = new Border { Background = new SolidColorBrush(Color.FromRgb(244, 246, 248)), CornerRadius = new CornerRadius(8), Child = image }; row.Children.Add(box);
+        var box = new PencilBorder { Background = PencilPalette.Inset, Child = image }; row.Children.Add(box);
         var caption = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 8, 0) }; Grid.SetColumn(caption, 1); row.Children.Add(caption);
         var pick = new Button { Content = "선택", VerticalAlignment = VerticalAlignment.Center }; Grid.SetColumn(pick, 2); row.Children.Add(pick);
         void Refresh()

@@ -21,18 +21,20 @@ public partial class LibraryDashboard
         if (_current is null) return;
         _loading = true;
         DetailName.Text = DisplayName(_current);
+        PreviewSurface.Height = _activeState is null ? 194 : 146;
         var states = EditStates.ToArray();
         var settings = states.Select(_current.Settings).ToArray();
         var volume = Common(settings.Select(s => s.Volume));
         var speed = Common(settings.Select(s => s.Speed));
         VolumeInput.Value = volume ?? settings[0].Volume; VolumeInput.IsMixed = volume is null;
         SpeedInput.Value = speed ?? settings[0].Speed; SpeedInput.IsMixed = speed is null;
-        var imageStates = states.Where(s => !MascotMedia.IsVideo(_current.For(s).Image)).ToArray();
-        DurationInput.Visibility = imageStates.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (imageStates.Length > 0)
+        var showDuration = _activeState is { } selectedState && !MascotMedia.IsVideo(_current.For(selectedState).Image);
+        DurationInput.Visibility = showDuration ? Visibility.Visible : Visibility.Collapsed;
+        DurationInput.IsEnabled = showDuration;
+        DurationInput.IsMixed = false;
+        if (showDuration && _activeState is { } imageState)
         {
-            var durations = imageStates.Select(s => LibraryStore.Playback(_current, s, _manager.Configuration.For(s)).ShowDurationMs).ToArray();
-            var duration = Common(durations); DurationInput.Value = duration ?? durations[0]; DurationInput.IsMixed = duration is null;
+            DurationInput.Value = LibraryStore.Playback(_current, imageState, _manager.Configuration.For(imageState)).ShowDurationMs;
         }
         SetToggle(LoopCheck, "반복", Common(settings.Select(s => s.Loop)));
         SetToggle(PlayCheck, "재생", Common(states.Select(s => _current.Events.Contains(MascotConfiguration.StateKey(s)))));
@@ -47,9 +49,11 @@ public partial class LibraryDashboard
     private void StateSettings_OnClick(object sender, RoutedEventArgs e)
     {
         if (_current is null) return;
+        DurationInput.CancelEdit();
         _history.BreakMerge(); StopTest();
         _activeState = _activeState is null ? ((PreviewChoice)PreviewState.SelectedItem).State : null;
         StateSettingsButton.Content = _activeState is null ? "상태별 설정" : "전체로";
+        Pencil.SetIcon(StateSettingsButton, _activeState is null ? PencilIconKind.Settings : PencilIconKind.Back);
         ScopeLabel.Text = _activeState is null ? "전체" : "상태별";
         PreviewState.Visibility = _activeState is null ? Visibility.Collapsed : Visibility.Visible;
         RefreshInspector(); ShowPreview();
@@ -96,10 +100,10 @@ public partial class LibraryDashboard
     }
     private void Duration_OnChanged(object? sender, EventArgs e)
     {
-        if (_loading || _current is null) return;
-        var m = _current; var states = EditStates.Where(s => !MascotMedia.IsVideo(m.For(s).Image)).ToArray();
+        if (_loading || _current is null || _activeState is not { } state || MascotMedia.IsVideo(_current.For(state).Image)) return;
+        var m = _current;
         var value = (int)Math.Round(DurationInput.Value);
-        Commit(ChangeLabel("이미지 재생시간 변경"), () => { foreach (var state in states) m.Settings(state).ImageDurationMs = value; });
+        Commit(ChangeLabel("이미지 재생시간 변경"), () => m.Settings(state).ImageDurationMs = value);
         StopTest(); RefreshInspector();
     }
     private void Loop_OnClick(object sender, RoutedEventArgs e)

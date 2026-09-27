@@ -85,7 +85,6 @@ public partial class LibraryDashboard : UserControl
         SelectedList.ItemsSource = _store.Library.Selected.Select(ToCard).ToList();
         InstalledList.SelectedItem = all.FirstOrDefault(c => c.Mascot.Id == top);
         SelectedList.SelectedItem = SelectedList.Items.Cast<Card>().FirstOrDefault(c => c.Mascot.Id == bottom);
-        InstalledCount.Text = all.Count.ToString(); SelectedCount.Text = _store.Library.Selected.Count.ToString();
         _loading = false; UpdateButtons();
     }
     private void UpdateButtons()
@@ -224,7 +223,7 @@ public partial class LibraryDashboard : UserControl
         {
             list.QueryContinueDrag -= query; list.GiveFeedback -= feedback;
             ghost.Close(); if (source is not null) source.Opacity = oldOpacity;
-            DropZone.Background = Brushes.White;
+            DropZone.BorderBrush = PencilPalette.Line;
         }
         if (selected) CompleteSelectionDrag(id, released, cancelled, inside);
     }
@@ -235,16 +234,17 @@ public partial class LibraryDashboard : UserControl
         var selected = e.Data.GetData(SelectedDragFormat) is string selectedId && _store.Library.Selected.Any(m => m.Id == selectedId);
         var add = e.Data.GetData(DragFormat) is string id && _store.Library.Installed.Any(m => m.Id == id);
         e.Effects = selected ? DragDropEffects.Move : add ? DragDropEffects.Copy : DragDropEffects.None;
-        DropZone.Background = selected || add ? new SolidColorBrush(Color.FromRgb(231, 246, 240)) : Brushes.White; e.Handled = true;
+        DropZone.BorderBrush = selected || add ? PencilPalette.Emphasis : PencilPalette.Line; e.Handled = true;
     }
-    private void Selected_OnDragLeave(object sender, DragEventArgs e) => DropZone.Background = Brushes.White;
+    private void Selected_OnDragLeave(object sender, DragEventArgs e) => DropZone.BorderBrush = PencilPalette.Line;
     private void Selected_OnDrop(object sender, DragEventArgs e)
-    { DropZone.Background = Brushes.White; ReceiveDrop(e.Data); e.Handled = true; }
+    { DropZone.BorderBrush = PencilPalette.Line; ReceiveDrop(e.Data); e.Handled = true; }
     internal bool ReceiveDrop(IDataObject data) => data.GetData(DragFormat) is string id && AddMascot(id);
 
     private void PreviewState_OnChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_activeState is null || PreviewState.SelectedItem is not PreviewChoice choice) return;
+        DurationInput.CancelEdit();
         _activeState = choice.State; _history?.BreakMerge(); StopTest(); RefreshInspector(); ShowPreview();
     }
     private void ShowPreview()
@@ -297,10 +297,15 @@ public partial class LibraryDashboard : UserControl
         _testOverlay.ShowState(state, cfg, path, sound);
         if (sound && !MascotMedia.IsVideo(path) && global.SoundEnabled)
             _testSound.Play(_manager.ResolveAsset(cfg.Sound), cfg.Volume * global.MasterVolume, cfg.PlaybackSpeed);
-        TestButton.Content = "■ 중지"; _testTimeout.Start();
+        TestButton.Content = "중지"; Pencil.SetIcon(TestButton, PencilIconKind.Stop);
+        System.Windows.Automation.AutomationProperties.SetName(TestButton, "중지"); _testTimeout.Start();
     }
     public void StopTest()
-    { _testTimeout.Stop(); _testSound.Stop(); _testOverlay?.Close(); _testOverlay = null; TestButton.Content = "▶ 테스트"; }
+    {
+        _testTimeout.Stop(); _testSound.Stop(); _testOverlay?.Close(); _testOverlay = null;
+        TestButton.Content = "테스트"; Pencil.SetIcon(TestButton, PencilIconKind.Play);
+        System.Windows.Automation.AutomationProperties.SetName(TestButton, "테스트");
+    }
     public void Shutdown() { _usageTimer.Stop(); SaveUsage(); _editorDialog?.Close(); StopTest(); StopPreview(); _testSound.Dispose(); }
     private void Register_OnClick(object sender, RoutedEventArgs e)
     {
@@ -322,7 +327,7 @@ public partial class LibraryDashboard : UserControl
         _editorDialog?.Close();
         var window = new Window { Title = title, Width = 420, SizeToContent = SizeToContent.Height, MaxHeight = SystemParameters.WorkArea.Height - 40,
             ResizeMode = ResizeMode.NoResize, Owner = Window.GetWindow(this), WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = Brushes.White, Foreground = new SolidColorBrush(Color.FromRgb(38, 50, 64)), Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
+            Background = PencilPalette.Paper, Foreground = PencilPalette.Ink, Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
         window.Resources = Resources; window.PreviewKeyDown += History_OnKeyDown;
         _editorDialog = window; window.Closed += (_, _) => _editorDialog = null; return window;
     }

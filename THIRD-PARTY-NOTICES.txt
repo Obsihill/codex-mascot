@@ -1,5 +1,11 @@
 Third-party notices
 
+Nanum Pen Script (unmodified embedded font)
+Copyright (c) 2010, NHN Corporation. Designed by Sandoll Communications Inc.
+https://github.com/google/fonts/tree/main/ofl/nanumpenscript
+SIL Open Font License 1.1. Full notice and license: Fonts/OFL.txt.
+Font SHA256: 6f0d1ab29c7894010dc88831fb7a0a51edb79136e450344183de5b1a8b52bd43
+
 NAudio 2.2.1 (including NAudio.Core, NAudio.WinMM, NAudio.Wasapi)
 https://github.com/naudio/NAudio/tree/v2.2.1
 Unmodified packages, MIT License:

@@ -45,8 +45,18 @@ internal static class LibrarySettingsTests
             volume.CommitValue(1.25);
             check(CustomizationManager.States.All(s => Mascot().Settings(s).Volume == 1.25) && Mascot().Settings(MascotState.Completed).Speed == 1.5 && Mascot().Settings(MascotState.Running).Speed == 1, "whole-scope volume changes only that field across states");
             check(dashboard.TryHistoryGesture(Key.Z, ModifierKeys.Control) && Mascot().Settings(MascotState.Completed).Volume == 2 && Mascot().Settings(MascotState.Running).Volume == 1, "Ctrl Z restores mixed per-state values");
-            check(Control<TextBlock>("Feedback").Text.Contains("실행 취소") && Control<TextBlock>("Feedback").Text.Contains("볼륨"), "bottom history describes reverted setting");
+            check(Control<TextBlock>("Feedback").Text.Contains("실행 취소") && Control<TextBlock>("Feedback").Text.Contains("볼륨"), "footer history describes reverted setting");
+            CheckFooter(check, dashboard);
+            if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(dashboard, Path.ChangeExtension(screenshot, ".undo-footer.png"));
             check(dashboard.TryHistoryGesture(Key.Y, ModifierKeys.Control) && Mascot().Settings(MascotState.Completed).Volume == 1.25, "Ctrl Y redoes setting");
+            check(Control<TextBlock>("Feedback").Text.Contains("다시 실행"), "redo updates the same inline status label");
+            var feedback = Control<TextBlock>("Feedback"); var savedFeedback = feedback.Text;
+            window.Width = 1020; window.Height = 760;
+            feedback.Text = string.Concat(Enumerable.Repeat("아주 긴 마스코트 이름 · 전체 볼륨 설정 실행 취소 · ", 15));
+            CheckFooter(check, dashboard);
+            check(feedback.TextTrimming == TextTrimming.CharacterEllipsis && Equals(feedback.ToolTip, feedback.Text), "long inline history trims visually but exposes its full text in a tooltip");
+            if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(dashboard, Path.ChangeExtension(screenshot, ".long-footer.png"));
+            feedback.Text = savedFeedback; window.Width = 1220; window.Height = 900;
             dashboard.TryHistoryGesture(Key.Z, ModifierKeys.Control);
             check(dashboard.TryHistoryGesture(Key.Z, ModifierKeys.Control | ModifierKeys.Shift) && Mascot().Settings(MascotState.Running).Volume == 1.25, "Ctrl Shift Z also redoes setting");
             check(!dashboard.TryHistoryGesture(Key.Z, ModifierKeys.None) && !dashboard.TryHistoryGesture(Key.Z, ModifierKeys.Control | ModifierKeys.Alt), "plain typing and unrelated key chords are not intercepted");
@@ -87,5 +97,18 @@ internal static class LibrarySettingsTests
         history.Commit("register sample", () => store.Library.Installed.Add(new LibraryMascot { Id = "new" }));
         history.Undo(); check(store.Library.Installed.All(m => m.Id != "new"), "registration metadata can be undone");
         history.Redo(); check(store.Library.Installed.Any(m => m.Id == "new"), "registration metadata can be redone");
+    }
+    private static void CheckFooter(Action<bool, string> check, LibraryDashboard dashboard)
+    {
+        dashboard.UpdateLayout();
+        var footer = (Grid)dashboard.FindName("StudioFooter");
+        var feedback = (TextBlock)dashboard.FindName("Feedback");
+        var register = (Button)dashboard.FindName("RegisterButton");
+        var settings = (Button)dashboard.FindName("AppSettingsButton");
+        var statusBounds = feedback.TransformToAncestor(footer).TransformBounds(new Rect(feedback.RenderSize));
+        var buttonBounds = register.TransformToAncestor(footer).TransformBounds(new Rect(register.RenderSize));
+        var settingsBounds = settings.TransformToAncestor(footer).TransformBounds(new Rect(settings.RenderSize));
+        check(feedback.Parent == footer && statusBounds.Right + 19 <= buttonBounds.Left && Math.Abs(statusBounds.Top + statusBounds.Height / 2 - buttonBounds.Top - buttonBounds.Height / 2) < 1, "history sits left of the footer buttons, vertically centered on the same row");
+        check(settingsBounds.Right <= footer.ActualWidth + 1 && statusBounds.Width > 100 && footer.ActualHeight == buttonBounds.Height, "long history never pushes buttons off-screen or creates a second footer row");
     }
 }

@@ -10,17 +10,20 @@ namespace CodexMascot.App;
 // on release, so a drag is one undo step and Escape never modifies persisted data.
 public sealed class NumericDragInput : UserControl
 {
-    private readonly Border _surface;
+    private readonly PencilBorder _surface;
+    private readonly PencilIcon _icon = new() { Width = 20, Height = 20, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _label = new() { VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
-    private readonly TextBlock _display = new() { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, IsHitTestVisible = false };
+    private readonly TextBlock _display = new() { FontFamily = PencilFonts.Numbers, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, IsHitTestVisible = false };
     private readonly TextBox _editor = new() { Visibility = Visibility.Collapsed, TextAlignment = TextAlignment.Right, Cursor = Cursors.IBeam,
-        Padding = new Thickness(0), BorderThickness = new Thickness(0), Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center };
+        FontFamily = PencilFonts.Numbers, FontSize = 13, Padding = new Thickness(0), BorderThickness = new Thickness(0), Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center };
     private bool _pointer, _dragging, _editing, _startMixed, _invalid;
     private double _startX, _lastX, _startValue, _accumulator;
 
     public static readonly DependencyProperty ValueProperty = DependencyProperty.Register(nameof(Value), typeof(double), typeof(NumericDragInput), new PropertyMetadata(0d, RenderChanged));
     public static readonly DependencyProperty IsMixedProperty = DependencyProperty.Register(nameof(IsMixed), typeof(bool), typeof(NumericDragInput), new PropertyMetadata(false, RenderChanged));
     public static readonly DependencyProperty LabelProperty = DependencyProperty.Register(nameof(Label), typeof(string), typeof(NumericDragInput), new PropertyMetadata("", RenderChanged));
+    public static readonly DependencyProperty IconProperty = DependencyProperty.Register(nameof(Icon), typeof(PencilIconKind), typeof(NumericDragInput), new PropertyMetadata(PencilIconKind.None, RenderChanged));
+    public PencilIconKind Icon { get => (PencilIconKind)GetValue(IconProperty); set => SetValue(IconProperty, value); }
     public double Value { get => (double)GetValue(ValueProperty); set => SetValue(ValueProperty, value); }
     public bool IsMixed { get => (bool)GetValue(IsMixedProperty); set => SetValue(IsMixedProperty, value); }
     public string Label { get => (string)GetValue(LabelProperty); set => SetValue(LabelProperty, value); }
@@ -41,15 +44,17 @@ public sealed class NumericDragInput : UserControl
     public NumericDragInput()
     {
         Focusable = true; Cursor = Cursors.SizeWE; MinHeight = 40;
-        var ink = new SolidColorBrush(Color.FromRgb(38, 50, 64));
+        var ink = PencilPalette.Ink;
         _label.Foreground = _display.Foreground = _editor.Foreground = ink; _editor.Margin = new Thickness(0);
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         _label.Margin = new Thickness(0, 0, 12, 0);
         Grid.SetColumn(_display, 1); Grid.SetColumn(_editor, 1);
-        grid.Children.Add(_label); grid.Children.Add(_display); grid.Children.Add(_editor);
-        _surface = new Border { Child = grid, Padding = new Thickness(10, 8, 10, 8), CornerRadius = new CornerRadius(7), BorderThickness = new Thickness(1) };
+        var labelPanel = new StackPanel { Orientation = Orientation.Horizontal };
+        labelPanel.Children.Add(_icon); labelPanel.Children.Add(_label);
+        grid.Children.Add(labelPanel); grid.Children.Add(_display); grid.Children.Add(_editor);
+        _surface = new PencilBorder { Child = grid, Padding = new Thickness(10, 8, 10, 8), BorderThickness = new Thickness(1) };
         Content = _surface;
         _editor.LostKeyboardFocus += (_, _) => { if (_editing && !TryCommitText()) CancelEdit(); };
         MouseEnter += (_, _) => Render(); MouseLeave += (_, _) => Render();
@@ -64,8 +69,9 @@ public sealed class NumericDragInput : UserControl
     {
         if (_surface is null) return;
         _label.Text = Label; _display.Text = IsMixed ? "?" : Number(Value) + Suffix;
-        _surface.Background = new SolidColorBrush(IsMouseOver && !_editing ? Color.FromRgb(239, 248, 245) : Colors.White);
-        _surface.BorderBrush = _invalid ? Brushes.Firebrick : new SolidColorBrush(IsKeyboardFocusWithin || IsMouseOver ? Color.FromRgb(50, 140, 121) : Color.FromRgb(217, 223, 229));
+        _icon.Kind = Icon; _icon.Visibility = Icon == PencilIconKind.None ? Visibility.Collapsed : Visibility.Visible;
+        _surface.Background = PencilPalette.Surface;
+        _surface.BorderBrush = _invalid ? Brushes.Firebrick : IsEnabled && IsMouseOver ? PencilPalette.Emphasis : IsKeyboardFocusWithin ? PencilPalette.Accent : PencilPalette.Line;
         ToolTip = _invalid ? "올바른 숫자를 입력하세요." : null;
         System.Windows.Automation.AutomationProperties.SetName(this, Label);
     }

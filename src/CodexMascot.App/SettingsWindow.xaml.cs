@@ -9,7 +9,7 @@ namespace CodexMascot.App;
 public partial class SettingsWindow : Window
 {
     private readonly CustomizationManager _manager;
-    private readonly TextBlock _feedback = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.LightBlue, Margin = new Thickness(4, 12, 4, 0) };
+    private readonly TextBlock _feedback = new() { TextWrapping = TextWrapping.Wrap, Foreground = PencilPalette.Accent, Margin = new Thickness(4, 12, 4, 0) };
     private readonly StackPanel _stateOptions = new();
     private MascotState _state = MascotState.Completed;
     public event EventHandler? Saved;
@@ -66,7 +66,7 @@ public partial class SettingsWindow : Window
         }));
         row.Children.Add(Button("알림음 제거", () => { cfg.Sound = null; Save(); BuildStateOptions(); }));
         _stateOptions.Children.Add(row);
-        _stateOptions.Children.Add(new TextBlock { Text = cfg.Sound is null ? "알림음 없음" : Path.GetFileName(cfg.Sound), Foreground = Brushes.LightGray, Margin = new Thickness(8), TextTrimming = TextTrimming.CharacterEllipsis });
+        _stateOptions.Children.Add(new TextBlock { Text = cfg.Sound is null ? "알림음 없음" : Path.GetFileName(cfg.Sound), Foreground = PencilPalette.Muted, Margin = new Thickness(8), TextTrimming = TextTrimming.CharacterEllipsis });
     }
     private FrameworkElement Number(string label, double value, double min, double max, int decimals, double sensitivity, Action<double> change)
     {
@@ -76,7 +76,7 @@ public partial class SettingsWindow : Window
     }
     private CheckBox Check(string text, bool value, Action<bool> change)
     {
-        var box = new CheckBox { Content = text, IsChecked = value, Foreground = Brushes.White, Margin = new Thickness(8) };
+        var box = new CheckBox { Content = text, IsChecked = value, Foreground = PencilPalette.Ink, Margin = new Thickness(8) };
         box.Click += (_, _) => Try(() => { change(box.IsChecked == true); Save(); }); return box;
     }
     private void Save() => Try(() => { _manager.Save(); Saved?.Invoke(this, EventArgs.Empty); });
@@ -105,5 +105,10 @@ public partial class SettingsWindow : Window
         if (dialog.ShowDialog(this) == true) Try(() => { _manager.ImportTheme(dialog.FileName); BuildUi(); Save(); });
     }
     private static Button Button(string title, Action action)
-    { var button = new Button { Content = title }; button.Click += (_, _) => action(); return button; }
+    {
+        var button = new Button { Content = title, Margin = new Thickness(4) };
+        if (title.Contains("알림음")) Pencil.SetIcon(button, title.Contains("제거") ? PencilIconKind.Remove : PencilIconKind.Volume);
+        else if (title.Contains("폴더")) Pencil.SetIcon(button, PencilIconKind.Folder);
+        button.Click += (_, _) => action(); return button;
+    }
 }

@@ -12,6 +12,8 @@
     <Version>0.2.1</Version>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Fonts\NanumPenScript-Regular.ttf" />
+    <Content Include="Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="CodexMascot.App.Tests" />
     <ProjectReference Include="..\CodexMascot.Core\CodexMascot.Core.csproj" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />

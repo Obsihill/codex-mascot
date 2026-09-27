@@ -35,6 +35,7 @@ internal static class Program
             StudioControlsTests.Run(Check, dir);
             FolderLibraryTests.Run(Check, dir);
             LibraryImportDurationTests.Run(Check, dir);
+            PencilThemeTests.Run(Check, dir);
             AudioGainTests.Run(Check);
             using var image = new Image<Bgra32>(16, 16, new Bgra32(255, 0, 0));
             image.Frames.RootFrame.Metadata.GetGifMetadata().FrameDelay = 12;
