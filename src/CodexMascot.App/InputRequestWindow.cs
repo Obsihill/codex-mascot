@@ -10,7 +10,8 @@ public static class InputRequestWindow
         if (!parameters.TryGetProperty("questions", out var questions)) return null;
         var window = new Window { Title = "Codex 질문에 답변", Owner = owner, Width = 560, Height = 500,
             WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = PencilPalette.Paper, Foreground = PencilPalette.Ink };
-        window.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/CodexMascot.App;component/PencilTheme.xaml", UriKind.Relative) });
+        window.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/AgentMascot;component/PencilTheme.xaml", UriKind.Relative) });
+        PencilWindow.Apply(window);
         var panel = new StackPanel { Margin = new Thickness(18) };
         var inputs = new Dictionary<string, TextBox>();
         foreach (var q in questions.EnumerateArray())

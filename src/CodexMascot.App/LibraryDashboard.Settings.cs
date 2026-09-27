@@ -28,7 +28,10 @@ public partial class LibraryDashboard
         var speed = Common(settings.Select(s => s.Speed));
         VolumeInput.Value = volume ?? settings[0].Volume; VolumeInput.IsMixed = volume is null;
         SpeedInput.Value = speed ?? settings[0].Speed; SpeedInput.IsMixed = speed is null;
-        var showDuration = _activeState is { } selectedState && !MascotMedia.IsVideo(_current.For(selectedState).Image);
+        var enabled = _activeState is null || _current.Events.Contains(MascotConfiguration.StateKey(_activeState.Value));
+        foreach (var control in new UIElement[] { VolumeInput, SpeedInput, PositionButton, TestButton, LoopCheck, HoldCheck })
+            control.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+        var showDuration = enabled && _activeState is { } selectedState && !MascotMedia.IsVideo(_current.For(selectedState).Image);
         DurationInput.Visibility = showDuration ? Visibility.Visible : Visibility.Collapsed;
         DurationInput.IsEnabled = showDuration;
         DurationInput.IsMixed = false;
@@ -37,15 +40,17 @@ public partial class LibraryDashboard
             DurationInput.Value = LibraryStore.Playback(_current, imageState, _manager.Configuration.For(imageState)).ShowDurationMs;
         }
         SetToggle(LoopCheck, "반복", Common(settings.Select(s => s.Loop)));
+        SetToggle(HoldCheck, "클릭해야 닫힘", Common(settings.Select(s => s.HoldUntilClick == true)));
         SetToggle(PlayCheck, "재생", Common(states.Select(s => _current.Events.Contains(MascotConfiguration.StateKey(s)))));
         StatePlaybackOptions.Visibility = _activeState is null ? Visibility.Collapsed : Visibility.Visible;
         ResetSettingsButton.Visibility = _activeState is null ? Visibility.Visible : Visibility.Collapsed;
         var samePosition = settings.Select(s => (s.Position, s.MonitorDevice, s.CustomLeft, s.CustomTop)).Distinct().Count() == 1;
-        PositionButton.Content = samePosition ? "위치 선택" : "위치 선택 ?";
+        var sameScale = settings.Select(s => s.Scale ?? _manager.Configuration.Global.Scale).Distinct().Count() == 1;
+        PositionButton.Content = samePosition && sameScale ? "위치 크기 변경" : "위치 크기 변경 ??";
         _loading = false;
     }
     private static void SetToggle(CheckBox check, string name, bool? value)
-    { check.IsChecked = value; check.Content = value is null ? name + " ?" : name; }
+    { check.IsChecked = value; check.Content = value is null ? name + " ??" : name; }
     private void StateSettings_OnClick(object sender, RoutedEventArgs e)
     {
         if (_current is null) return;
@@ -77,10 +82,13 @@ public partial class LibraryDashboard
         {
             var defaults = new LibraryMascot();
             m.Volume = defaults.Volume; m.Speed = defaults.Speed; m.Loop = defaults.Loop;
+            m.Scale = 1;
             m.Position = defaults.Position; m.CustomLeft = m.CustomTop = null; m.MonitorDevice = null;
             m.Events = defaults.Events;
             foreach (var state in CustomizationManager.States)
-            { m.For(state).Playback = new MascotPlaybackSettings(); m.For(state).SoundEnabled = true; }
+            { m.For(state).Playback = new MascotPlaybackSettings { Scale = 1,
+                HoldUntilClick = (m.SourceId ?? m.Id) is "original" or "mascat" && state is MascotState.Completed or MascotState.NeedsAttention or MascotState.Failed,
+                ImageDurationMs = (m.SourceId ?? m.Id) == "mascat" ? 2000 : null }; m.For(state).SoundEnabled = true; }
         });
         RefreshInspector(); ShowPreview();
     }
@@ -127,6 +135,44 @@ public partial class LibraryDashboard
         });
         StopTest(); RefreshInspector();
     }
+    private void Hold_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_loading || _current is null || _activeState is not { } state) return;
+        var mascot = _current; var value = HoldCheck.IsChecked == true;
+        Commit(ChangeLabel("클릭해야 닫힘 " + (value ? "켜기" : "끄기")), () => mascot.Settings(state).HoldUntilClick = value);
+        StopTest(); RefreshInspector();
+    }
+    internal bool SaveScale(string id, MascotState? state, double scale)
+    {
+        var m = _store.Library.Find(id);
+        if (m is null || !double.IsFinite(scale)) return false;
+        scale = Math.Clamp(scale, .4, 3);
+        var states = state is { } selectedState ? new[] { selectedState } : CustomizationManager.States;
+        var result = Commit(DisplayName(m) + " · " + (state is { } st ? MainWindow.StateName(st) : "전체") + " · 크기 변경", () =>
+        {
+            foreach (var s in states)
+            {
+                var settings = m.Settings(s);
+                if (settings.Position != "custom-center")
+                {
+                    var center = OverlayWindow.PlacementCenter(LibraryStore.Placement(m, _manager.Configuration.Global, s));
+                    settings.Position = "custom-center"; settings.MonitorDevice = null;
+                    settings.CustomLeft = center.X; settings.CustomTop = center.Y;
+                }
+                settings.Scale = scale;
+            }
+            if (state is null)
+            {
+                if (m.Position != "custom-center")
+                {
+                    var center = OverlayWindow.PlacementCenter(LibraryStore.Placement(m, _manager.Configuration.Global));
+                    m.Position = "custom-center"; m.MonitorDevice = null; m.CustomLeft = center.X; m.CustomTop = center.Y;
+                }
+                m.Scale = scale;
+            }
+        });
+        RefreshInspector(); return result || states.All(s => m.Settings(s).Scale == scale);
+    }
     internal bool SavePosition(string id, MascotState? state, double x, double y)
     {
         var m = _store.Library.Find(id);
@@ -136,9 +182,9 @@ public partial class LibraryDashboard
         {
             foreach (var s in states)
             {
-                var settings = m.Settings(s); settings.Position = "custom"; settings.MonitorDevice = null; settings.CustomLeft = x; settings.CustomTop = y;
+                var settings = m.Settings(s); settings.Position = "custom-center"; settings.MonitorDevice = null; settings.CustomLeft = x; settings.CustomTop = y;
             }
-            if (state is null) { m.Position = "custom"; m.MonitorDevice = null; m.CustomLeft = x; m.CustomTop = y; }
+            if (state is null) { m.Position = "custom-center"; m.MonitorDevice = null; m.CustomLeft = x; m.CustomTop = y; }
         });
         RefreshInspector(); return result || states.All(s => m.Settings(s).CustomLeft == x && m.Settings(s).CustomTop == y);
     }

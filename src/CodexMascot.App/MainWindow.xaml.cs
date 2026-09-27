@@ -32,7 +32,6 @@ public partial class MainWindow : Window
     private ICodexClient? _launcherClient;
     private string? _ownedThread, _ownedTurn;
     private bool _closing, _exitRequested, _launcherRunning;
-    private SettingsWindow? _settings;
     private readonly Dictionary<AgentKind, MonitorHealth> _health = new();
     private string _filter = "";
     private readonly string _journal = Path.Combine(AppPaths.ConfigDirectory, "events.jsonl");
@@ -40,14 +39,18 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        MaxHeight = SystemParameters.WorkArea.Height;
+        PencilWindow.Apply(this);
         JobsListView.ItemsSource = _jobs;
         ApprovalsListBox.ItemsSource = _approvals;
         var config = _customization.Configuration;
         _library = new LibraryStore(global: config.Global, configuration: config);
         Dashboard.Initialize(_library, _customization);
         Dashboard.SettingsRequested += (_, _) => OpenWorkspaceSettings();
-        Dashboard.LibraryChanged += (_, _) => _presentations.RemoveIneligible(_library.Library);
+        Dashboard.LibraryChanged += (_, _) =>
+        {
+            _presentations.RemoveIneligible(_library.Library);
+            _presentations.ApplyPreferences(_library, _customization);
+        };
         _presentations.Clicked += Overlay_OnClicked;
         _presentations.Feedback += (_, text) => Log(text);
         CodexHomeTextBox.Text = config.Monitor.CodexHome ?? HookIntegration.DefaultHomeFor(AgentKind.Codex);
@@ -70,9 +73,9 @@ public partial class MainWindow : Window
         ClaudeHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
         FilterTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
         RefreshHookToggle();
-        _tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Information, Text = "마스코트 스튜디오", Visible = true };
+        _tray = new Forms.NotifyIcon { Icon = AppBrand.CreateTrayIcon(), Text = AppBrand.Name, Visible = true };
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("마스코트 스튜디오 열기", null, (_, _) => Dispatcher.BeginInvoke(ShowMain));
+        menu.Items.Add(AppBrand.OpenLabel, null, (_, _) => Dispatcher.BeginInvoke(ShowMain));
         menu.Items.Add("캐릭터 숨기기", null, (_, _) => Dispatcher.Invoke(HideMascots));
         menu.Items.Add("설정", null, (_, _) => Dispatcher.Invoke(OpenWorkspaceSettings));
         menu.Items.Add("종료", null, (_, _) => Dispatcher.Invoke(ExitApplication));
@@ -83,6 +86,11 @@ public partial class MainWindow : Window
         _foregroundTimer.Start();
         Loaded += async (_, _) =>
         {
+            if (config.Global.StartWithWindows)
+            {
+                try { StartupRegistration.RefreshRenamedExecutable(); }
+                catch (Exception ex) { Log("Windows 자동 시작 경로를 갱신하지 못했습니다: " + ex.Message); }
+            }
             if (Environment.GetCommandLineArgs().Contains("--tray")) Hide();
             if (config.Monitor.AutoStart) await StartMonitoring();
             if (_customization.LoadWarning is not null) Log(_customization.LoadWarning);
@@ -265,12 +273,13 @@ public partial class MainWindow : Window
             try { File.AppendAllText(_journal, JsonSerializer.Serialize(new { time = e.Time, e.SourceId, e.ThreadId, kind = e.Kind.ToString(), state = result.State.ToString() }) + Environment.NewLine); }
             catch (IOException) { }
         }
-        if (result.StateChanged) Present(result.State, result.ShouldNotify);
+        if (result.StateChanged) Present(result.State, !e.IsReplay);
     }
     private void Present(MascotState state, bool sound)
     {
-        var resolved = _completionPopup.Resolve(state, _customization.Configuration.Global.KeepCompletedVisibleUntilClick);
-        if (resolved == MascotState.Completed && _customization.Configuration.Global.KeepCompletedVisibleUntilClick &&
+        var keepCompleted = _library.Library.Eligible(MascotState.Completed).Any(m => m.Settings(MascotState.Completed).HoldUntilClick == true);
+        var resolved = _completionPopup.Resolve(state, keepCompleted);
+        if (resolved == MascotState.Completed && keepCompleted &&
             _presentations.IsPresenting && _presentations.State == MascotState.Completed) return;
         sound &= resolved == state;
         state = resolved;
@@ -292,7 +301,7 @@ public partial class MainWindow : Window
                 j.Source, j.LastMessage ?? "", j.ProjectPath));
         if (selected is not null) JobsListView.SelectedItem = _jobs.FirstOrDefault(j => j.Id == selected);
         StatusTextBlock.Text = StateName(_aggregator.State);
-        _tray.Text = "마스코트 스튜디오 · " + StateName(_aggregator.State);
+        _tray.Text = AppBrand.Name + " · " + StateName(_aggregator.State);
     }
     internal static string StateName(MascotState state) => state switch
     {
@@ -334,7 +343,11 @@ public partial class MainWindow : Window
         if (_closing || !_presentations.IsPresenting) return;
         if (DateTimeOffset.UtcNow < _foregroundDismissAfter) return;
         if (_presentations.State is not (MascotState.Completed or MascotState.NeedsAttention or MascotState.Failed or MascotState.Interrupted)) return;
-        if (CodexDesktopActivator.IsForeground(_popupAgent)) DismissAgentNotification(_popupAgent);
+        if (CodexDesktopActivator.IsForeground(_popupAgent))
+        {
+            if (_presentations.HasHeldNotifications) _presentations.DismissUnheld();
+            else DismissAgentNotification(_popupAgent);
+        }
     }
     private void DismissAgentNotification(AgentKind kind)
     {
@@ -408,23 +421,20 @@ public partial class MainWindow : Window
         if (_workspaceSettings is not null) { _workspaceSettings.Activate(); return; }
         ShellRoot.Children.Remove(WorkspacePanel);
         WorkspacePanel.Visibility = Visibility.Visible;
-        _workspaceSettings = new Window { Title = "Mascot · 앱 설정", Width = 1000, Height = 800, MinWidth = 780, MinHeight = 600,
-            MaxHeight = SystemParameters.WorkArea.Height, Background = PencilPalette.Paper,
-            Foreground = PencilPalette.Ink, Resources = Resources, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = WorkspacePanel };
+        var settings = new SettingsWindow(_customization, WorkspacePanel) { Owner = this };
+        _workspaceSettings = settings;
+        settings.Saved += (_, _) => ApplyConfiguration();
         _workspaceSettings.Closed += (_, _) =>
         {
-            _workspaceSettings.Content = null; _workspaceSettings = null;
+            settings.DetachConnection(); _workspaceSettings = null;
             WorkspacePanel.Visibility = Visibility.Collapsed; ShellRoot.Children.Add(WorkspacePanel);
         };
         _workspaceSettings.Show();
     }
     private void OpenSettings()
     {
-        if (_settings is not null) { _settings.Activate(); return; }
-        _settings = new SettingsWindow(_customization) { Owner = this };
-        _settings.Saved += (_, _) => ApplyConfiguration();
-        _settings.Closed += (_, _) => { _settings = null; ApplyConfiguration(); };
-        _settings.Show();
+        OpenWorkspaceSettings();
+        ((SettingsWindow)_workspaceSettings!).Pages.SelectedIndex = 0;
     }
     private void ApplyConfiguration()
     {
@@ -478,9 +488,8 @@ public partial class MainWindow : Window
             _foregroundTimer.Stop();
             _monitorEditTimer.Stop();
             _monitorCancel?.Cancel();
-            _settings?.Close();
             _presentations.Dispose();
-            _tray.Visible = false; _tray.Dispose();
+            _tray.Visible = false; var trayIcon = _tray.Icon; _tray.Dispose(); trayIcon?.Dispose();
             _ = _server.DisposeAsync(); _ = _cli.DisposeAsync();
         }
         base.OnClosing(e);

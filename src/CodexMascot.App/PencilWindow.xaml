@@ -1,0 +1,50 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:CodexMascot.App"
+ xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework">
+ <Style x:Key="PencilCaptionButton" TargetType="Button">
+  <Setter Property="Width" Value="40"/><Setter Property="Height" Value="28"/><Setter Property="Margin" Value="2,0"/>
+  <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{x:Static local:PencilPalette.Ink}"/>
+  <Setter Property="BorderBrush" Value="{x:Static local:PencilPalette.Line}"/><Setter Property="Focusable" Value="False"/>
+  <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+   <local:PencilBorder x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+    <local:PencilIcon x:Name="Icon" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" Kind="{Binding Path=(local:Pencil.Icon), RelativeSource={RelativeSource TemplatedParent}}"/>
+   </local:PencilBorder>
+   <ControlTemplate.Triggers>
+    <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsMouseOver" Value="True"/><Condition Property="IsEnabled" Value="True"/></MultiTrigger.Conditions><Setter TargetName="Box" Property="BorderBrush" Value="{x:Static local:PencilPalette.Emphasis}"/></MultiTrigger>
+    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{x:Static local:PencilPalette.Emphasis}"/></Trigger>
+    <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Box" Property="Opacity" Value=".4"/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="PencilWindowStyle" TargetType="Window">
+  <!-- Keep native window styles and WindowChrome's move/resize/system menu behavior. -->
+  <Setter Property="WindowStyle" Value="SingleBorderWindow"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Window">
+   <local:PencilBorder x:Name="WindowFrame" Background="{TemplateBinding Background}" BorderBrush="{x:Static local:PencilPalette.Line}" BorderThickness="1" Padding="{Binding Path=(local:PencilWindow.FramePadding), RelativeSource={RelativeSource TemplatedParent}}">
+    <Grid><Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+     <Grid x:Name="CaptionBar" Background="{x:Static local:PencilPalette.Paper}">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <TextBlock x:Name="WindowTitle" Text="{TemplateBinding Title}" FontFamily="{x:Static local:PencilFonts.Handwriting}" FontSize="20" Foreground="{x:Static local:PencilPalette.Ink}" VerticalAlignment="Center" Margin="14,0,12,0" TextTrimming="CharacterEllipsis" IsHitTestVisible="False"/>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,5,0">
+       <Button x:Name="CaptionMinimize" Style="{StaticResource PencilCaptionButton}" local:Pencil.Icon="Minimize" Command="{x:Static SystemCommands.MinimizeWindowCommand}" ToolTip="최소화" AutomationProperties.Name="최소화"/>
+       <Button x:Name="CaptionMaximize" Style="{StaticResource PencilCaptionButton}" local:Pencil.Icon="Maximize" Command="{x:Static SystemCommands.MaximizeWindowCommand}" ToolTip="최대화" AutomationProperties.Name="최대화"/>
+       <Button x:Name="CaptionClose" Style="{StaticResource PencilCaptionButton}" local:Pencil.Icon="Close" Command="{x:Static SystemCommands.CloseWindowCommand}" Foreground="{x:Static local:PencilPalette.Danger}" ToolTip="닫기" AutomationProperties.Name="닫기"/>
+      </StackPanel>
+     </Grid>
+     <AdornerDecorator Grid.Row="1"><ContentPresenter x:Name="WindowContent" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"/></AdornerDecorator>
+    </Grid>
+   </local:PencilBorder>
+   <ControlTemplate.Triggers>
+    <Trigger Property="WindowState" Value="Maximized">
+     <Setter TargetName="CaptionMaximize" Property="Command" Value="{x:Static SystemCommands.RestoreWindowCommand}"/>
+     <Setter TargetName="CaptionMaximize" Property="local:Pencil.Icon" Value="Restore"/>
+     <Setter TargetName="CaptionMaximize" Property="ToolTip" Value="이전 크기로"/><Setter TargetName="CaptionMaximize" Property="AutomationProperties.Name" Value="이전 크기로"/>
+    </Trigger>
+    <Trigger Property="ResizeMode" Value="NoResize"><Setter TargetName="CaptionMinimize" Property="Visibility" Value="Collapsed"/><Setter TargetName="CaptionMaximize" Property="Visibility" Value="Collapsed"/></Trigger>
+    <Trigger Property="ResizeMode" Value="CanMinimize"><Setter TargetName="CaptionMaximize" Property="Visibility" Value="Collapsed"/></Trigger>
+    <Trigger Property="IsActive" Value="False"><Setter TargetName="WindowTitle" Property="Foreground" Value="{x:Static local:PencilPalette.Muted}"/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+</ResourceDictionary>

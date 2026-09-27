@@ -18,6 +18,13 @@ internal static class Program
     private static void Main(string[] args)
     {
         if (args.FirstOrDefault() == "app-server") { FakeServer(); return; }
+        if (args.FirstOrDefault() == "--window-chrome")
+        {
+            _ = new System.Windows.Application { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
+            PencilWindowTests.Run(Check);
+            Console.WriteLine($"PASS: {_count} window chrome assertions.");
+            return;
+        }
         if (args.FirstOrDefault() == "--probe-desktop")
         {
             Console.WriteLine("Codex desktop window found: " + (CodexDesktopActivator.FindWindow(AgentKind.Codex) != IntPtr.Zero));
@@ -28,14 +35,21 @@ internal static class Program
         Directory.CreateDirectory(dir);
         try
         {
+            BrandingTests.Run(Check);
+            DistributionLibraryTests.Run(Check, dir);
+            RandomSoundTests.Run(Check, dir);
             PopupFeatureTests.Run(Check);
             LibraryFeatureTests.Run(Check, dir);
+            SequenceTest.Run(Check, dir);
             LibrarySettingsTests.Run(Check, dir);
             StudioInteractionTests.Run(Check, dir);
+            CenterPlacementTests.Run(Check, dir);
             StudioControlsTests.Run(Check, dir);
             FolderLibraryTests.Run(Check, dir);
+            LibrarySoundTests.Run(Check, dir);
             LibraryImportDurationTests.Run(Check, dir);
             PencilThemeTests.Run(Check, dir);
+            PencilWindowTests.Run(Check);
             AudioGainTests.Run(Check);
             using var image = new Image<Bgra32>(16, 16, new Bgra32(255, 0, 0));
             image.Frames.RootFrame.Metadata.GetGifMetadata().FrameDelay = 12;

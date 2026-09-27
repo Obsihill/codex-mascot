@@ -46,6 +46,7 @@ public sealed class GlobalConfiguration
     public bool SoundEnabled { get; set; } = true;
     public double MasterVolume { get; set; } = 1;
     public string? MonitorDevice { get; set; }
+    // "custom": legacy top-left; "custom-center": center of the image/video.
     public double? CustomLeft { get; set; }
     public double? CustomTop { get; set; }
     public bool ShowIdle { get; set; }
@@ -54,6 +55,7 @@ public sealed class GlobalConfiguration
 
 public sealed class StateConfiguration
 {
+    public bool? HoldUntilClick { get; set; }
     public double PlaybackSpeed { get; set; } = 1;
     public string? Image { get; set; }
     public string? Sound { get; set; }

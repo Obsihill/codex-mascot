@@ -51,6 +51,12 @@ internal static class PopupFeatureTests
             Pump(700);
             check(overlay.IsVisible && overlay.Opacity > .9, "completion survives configured duration and fade with fallback image");
             check(!IsClickThrough(overlay), "held completion remains clickable with click-through enabled");
+            var mascotHandle = new WindowInteropHelper(overlay).Handle;
+            check(overlay.ResizeMode == ResizeMode.NoResize && (GetWindowLong(mascotHandle, -16) & (0x00040000 | 0x00010000)) == 0, "mascot has neither native resizing nor maximize styles for edge snapping");
+            var originalSize = new Size(overlay.Width, overlay.Height);
+            SendMessage(mascotHandle, 0x0112, new IntPtr(0xF030), IntPtr.Zero);
+            Pump(30);
+            check(overlay.WindowState == WindowState.Normal && new Size(overlay.Width, overlay.Height) == originalSize, "native maximize command cannot stretch a notification mascot");
 
             global.KeepCompletedVisibleUntilClick = false;
             overlay.ApplyGlobal(global);
@@ -94,6 +100,9 @@ internal static class PopupFeatureTests
             RaiseMouse(overlay, UIElement.MouseLeftButtonUpEvent);
             check(clicked == 0 && overlay.IsVisible && (overlay.Left, overlay.Top) == beforeDrag, "locked drag does not move or acknowledge notification");
             overlay.PlacementMode = true;
+            SendMessage(mascotHandle, 0x0112, new IntPtr(0xF030), IntPtr.Zero);
+            Pump(30);
+            check(overlay.WindowState == WindowState.Normal && new Size(overlay.Width, overlay.Height) == originalSize, "placement-mode mascot also rejects native maximization");
             check(overlay.BeginPlacementDrag(), "explicit placement mode alone permits drag movement");
             overlay.CompletePlacementDrag();
             overlay.PlacementMode = false;
@@ -161,4 +170,5 @@ internal static class PopupFeatureTests
         public void RequestAttention(IntPtr window) => Calls.Add("flash");
     }
     [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr window, int index);
+    [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 }

@@ -19,7 +19,7 @@ internal static class LibraryFeatureTests
     private static void RunCore(Action<bool, string> check, string dir)
     {
         var file = Path.Combine(dir, "library.json");
-        var store = new LibraryStore(file, new GlobalConfiguration { Position = "top-left", CustomLeft = 120 });
+        var store = TestLibrary.Create(file, new GlobalConfiguration { Position = "top-left", CustomLeft = 120 });
         check(store.Library.Installed.Count == 7 && store.Library.Selected.Single().SourceId == "original", "library starts with six samples and preserves legacy mascot");
         check(store.Library.Select("bot") && !store.Library.Select("missing"), "selection validates source IDs");
         var bot = store.Library.Selected.Single(m => m.SourceId == "bot");
@@ -37,7 +37,7 @@ internal static class LibraryFeatureTests
         var global = new GlobalConfiguration { MasterVolume = .4, MonitorDevice = "default" };
         loaded.MonitorDevice = "test-screen";
         var placement = LibraryStore.Placement(loaded, global);
-        check(placement.MonitorDevice == "test-screen" && placement.Position == "center" && placement.MasterVolume == .4 && global.MonitorDevice == "default", "per-mascot placement does not overwrite global preferences");
+        check(placement.MonitorDevice == "test-screen" && placement.Position == "center" && placement.MasterVolume == 1 && global.MasterVolume == .4 && global.MonitorDevice == "default", "per-mascot placement ignores retired global volume without overwriting preferences");
         var playback = LibraryStore.Playback(loaded, MascotState.Completed, new StateConfiguration { ShowDurationMs = 4500 });
         check(playback.PlaybackSpeed == 1.5 && playback.Volume == .35 && playback.ShowDurationMs == 4500, "playback combines mascot controls and event lifetime");
         loaded.For(MascotState.Completed).SoundEnabled = false;
@@ -106,7 +106,7 @@ internal static class LibraryFeatureTests
             scope.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() =>
             {
-                var dialog = Application.Current.Windows.OfType<Window>().Single(w => w.Title == "위치 선택");
+                var dialog = Application.Current.Windows.OfType<Window>().Single(w => w.Title == "위치 크기 변경");
                 var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
                 check(!panel.Children.OfType<ComboBox>().Any(), "position dialog has no monitor or preset selectors");
                 var row = panel.Children.OfType<Grid>().Single();
@@ -120,7 +120,7 @@ internal static class LibraryFeatureTests
             }));
             ((Button)dashboard.FindName("PositionButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             var positioned = new LibraryStore(file).Library.Installed.Single(m => m.Id == "ghost");
-            check(positioned.Position == "custom" && positioned.CustomLeft == -120 && positioned.CustomTop == 240, "position dialog persists signed desktop coordinates");
+            check(positioned.Position == "custom-center" && positioned.CustomLeft == -120 && positioned.CustomTop == 240, "position dialog persists signed desktop center coordinates");
             var toggle = (Button)dashboard.FindName("TestButton");
             toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             check(dashboard.IsTesting && (string)toggle.Content == "중지" && Pencil.GetIcon(toggle) == PencilIconKind.Stop, "test button switches both label and pencil icon into stop while playing");
@@ -132,13 +132,30 @@ internal static class LibraryFeatureTests
                 var inspected = store.Library.Installed.Single(m => m.Id == "ghost");
                 var originalImage = inspected.For(MascotState.Completed).Image;
                 inspected.For(MascotState.Completed).Image = videoFixture;
+                if (((ComboBox)dashboard.FindName("PreviewState")).Visibility != Visibility.Visible)
+                    ((Button)dashboard.FindName("StateSettingsButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 ((ComboBox)dashboard.FindName("PreviewState")).SelectedIndex = 3;
                 toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 var testOverlay = Application.Current.Windows.OfType<OverlayWindow>().Single(w => w.IsVisible);
                 var video = (MediaElement)testOverlay.FindName("MascotVideo");
                 check(video.Source is not null && video.Volume == 0, "zero-volume event suppresses actual MP4 test audio");
+                var timeout = (DispatcherTimer)typeof(LibraryDashboard).GetField("_testTimeout", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(dashboard)!;
+                check(!timeout.IsEnabled, "video tests never start the ten-second image timeout");
                 toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 check(!dashboard.IsTesting && !testOverlay.IsVisible, "test toggle closes video overlay");
+                var originalLoop = inspected.Settings(MascotState.Completed).Loop;
+                inspected.Settings(MascotState.Completed).Loop = false;
+                toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                testOverlay = Application.Current.Windows.OfType<OverlayWindow>().Single(w => w.IsVisible);
+                video = (MediaElement)testOverlay.FindName("MascotVideo");
+                video.RaiseEvent(new RoutedEventArgs(MediaElement.MediaEndedEvent)); Pump();
+                check(!dashboard.IsTesting && !testOverlay.IsVisible && (string)toggle.Content == "테스트", "video end closes test and restores button without waiting for timeout");
+                inspected.Settings(MascotState.Completed).Loop = true;
+                toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                testOverlay = Application.Current.Windows.OfType<OverlayWindow>().Single(w => w.IsVisible);
+                ((MediaElement)testOverlay.FindName("MascotVideo")).RaiseEvent(new RoutedEventArgs(MediaElement.MediaEndedEvent)); Pump();
+                check(dashboard.IsTesting && !timeout.IsEnabled, "looped video remains active until explicitly stopped");
+                dashboard.StopTest(); inspected.Settings(MascotState.Completed).Loop = originalLoop;
                 inspected.For(MascotState.Completed).Image = originalImage;
                 ((ComboBox)dashboard.FindName("PreviewState")).SelectedIndex = 0;
             }
@@ -186,8 +203,17 @@ internal static class LibraryFeatureTests
         try
         {
             main.Show(); Pump();
-            main.Close(); Pump();
-            check(!main.IsVisible, "studio close hides window without terminating it");
+            check(main.Title == "Agent Mascot" && ((TextBlock)main.Template.FindName("WindowTitle", main)).Text == "Agent Mascot", "native and pencil caption titles use Agent Mascot");
+            var tray = (System.Windows.Forms.NotifyIcon)typeof(MainWindow).GetField("_tray", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(main)!;
+            check(tray.Text.StartsWith("Agent Mascot", StringComparison.Ordinal) && tray.ContextMenuStrip!.Items[0].Text == "Agent Mascot 열기", "tray tooltip and open menu use Agent Mascot");
+            typeof(MainWindow).GetMethod("RefreshJobs", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(main, null);
+            check(tray.Text.StartsWith("Agent Mascot · ", StringComparison.Ordinal), "tray status updates retain Agent Mascot branding");
+            CaptureDialog(main, "window");
+            PencilWindowTests.Execute(PencilWindowTests.Caption(main, "Maximize"));
+            CaptureDialog(main, "window-maximized");
+            PencilWindowTests.Execute(PencilWindowTests.Caption(main, "Maximize"));
+            PencilWindowTests.Execute(PencilWindowTests.Caption(main, "Close"));
+            check(!main.IsVisible, "pencil caption close hides studio without terminating it");
             main.Tray_OnMouseDoubleClick(null, new System.Windows.Forms.MouseEventArgs(System.Windows.Forms.MouseButtons.Right, 2, 0, 0, 0)); Pump();
             check(!main.IsVisible, "tray right double-click does not open studio");
             main.Tray_OnMouseDoubleClick(null, new System.Windows.Forms.MouseEventArgs(System.Windows.Forms.MouseButtons.Left, 2, 0, 0, 0)); Pump();
@@ -196,12 +222,22 @@ internal static class LibraryFeatureTests
             main.Tray_OnMouseDoubleClick(null, new System.Windows.Forms.MouseEventArgs(System.Windows.Forms.MouseButtons.Left, 2, 0, 0, 0)); Pump();
             check(main.WindowState == WindowState.Normal && Application.Current.Windows.OfType<MainWindow>().Count() == 1, "tray double-click restores minimized studio without another instance");
             main.OpenWorkspaceSettings(); Pump();
-            var settings = Application.Current.Windows.OfType<Window>().Single(w => w.Title == "Mascot · 앱 설정");
+            check(main.Icon is not null, "studio window uses packaged mascot icon");
+            var footerArt = (Image)((LibraryDashboard)main.FindName("Dashboard")).FindName("FooterMascotArt");
+            check(footerArt.Source is not null && !footerArt.IsHitTestVisible && !footerArt.Focusable, "footer artwork is packaged and cannot intercept interaction");
+            check(AppBrand.TrayIconUri != AppBrand.IconUri, "black tray artwork is independent of executable icon");
+            using (var trayIcon = AppBrand.CreateTrayIcon()) check(trayIcon.Width == 32 && trayIcon.Height == 32, "tray icon loads packaged 32px artwork independently of its stream");
+            var settings = Application.Current.Windows.OfType<Window>().Single(w => w.Title == "Agent Mascot · 앱 설정");
+            var settingsTabs = ((SettingsWindow)settings).Pages;
+            check(settingsTabs.Items.Cast<TabItem>().Select(t => (string)t.Header).SequenceEqual(new[] { "일반", "알림", "연결", "정보" }), "studio settings excludes legacy file and sound controls");
+            CaptureDialog(settings, "settings-overview");
+            settingsTabs.SelectedIndex = 2; Pump();
             check(settings.IsVisible && ((Grid)settings.Content).IsVisible, "connection controls open in settings window");
+            check(PencilWindowTests.Caption(settings, "Close").IsVisible, "connection settings use pencil window chrome");
             var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
             if (!string.IsNullOrWhiteSpace(screenshot)) Capture(settings, Path.ChangeExtension(screenshot, ".connections.png"));
             settings.Close(); main.OpenWorkspaceSettings(); Pump();
-            check(Application.Current.Windows.OfType<Window>().Count(w => w.Title == "Mascot · 앱 설정") == 1, "settings can reopen without losing or duplicating controls");
+            check(Application.Current.Windows.OfType<Window>().Count(w => w.Title == "Agent Mascot · 앱 설정") == 1, "settings can reopen without losing or duplicating controls");
         }
         finally { main.ExitApplication(); manager.Configuration.Monitor.AutoStart = autoStart; manager.Save(); }
     }

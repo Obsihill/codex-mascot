@@ -16,25 +16,33 @@ internal static class StudioControlsTests
     }
     private static void Numeric(Action<bool, string> check)
     {
-        var input = new NumericDragInput { Label = "볼륨", Value = 1, Minimum = 0, Maximum = 2, DisplayScale = 100, UnitsPerPixel = .5, Suffix = "%", Width = 320 };
+        var input = new NumericDragInput { Label = "볼륨", Value = 1, ShowValueFill = true, Minimum = 0, Maximum = 2, DisplayScale = 100, UnitsPerPixel = .5, Suffix = "%", Width = 320 };
         var host = new Window { Content = input, Width = 380, Height = 120, ShowInTaskbar = false, ShowActivated = false };
         var commits = 0; input.ValueCommitted += (_, _) => commits++;
         try
         {
             host.Show(); host.UpdateLayout();
             check(input.Cursor == Cursors.SizeWE && input.DisplayText == "100%" && ((Border)input.Content).Background is not null, "entire numeric row has horizontal drag cursor and hit-testable surface");
+            check(input.ValueFillFraction == .5, "100 percent volume fills half the 0 to 200 percent range");
+            var fill = (LinearGradientBrush)((Border)input.Content).Background;
+            check(fill.IsFrozen && fill.MappingMode == BrushMappingMode.RelativeToBoundingBox && fill.GradientStops[1].Offset == .5 && fill.GradientStops[2].Offset == .5 && fill.GradientStops[0].Color == PencilPalette.ValueFill.Color, "value fill uses a sharp gray rectangle and follows row resizing");
+            PencilThemeTests.CheckHover(check, input, (PencilBorder)input.Content, "filled numeric field");
             input.BeginPointer(0); input.MovePointer(40, false); input.MovePointer(80, false);
             check(input.Value == 1.4 && commits == 0, "volume scrubbing previews percentage without committing movements");
+            check(input.ValueFillFraction == .7, "gray fill follows scrub preview before persistence");
             input.EndPointer(); check(commits == 1, "release commits once");
             input.BeginPointer(0); input.MovePointer(20, true); input.EndPointer();
             check(input.Value == 1.41 && commits == 2, "shift drag offers ten-times finer adjustment");
             input.BeginPointer(0); input.MovePointer(1000, false); input.EndPointer();
             check(input.Value == 2, "volume drag clamps to 200 percent");
+            check(input.ValueFillFraction == 1 && ((Border)input.Content).Background == PencilPalette.ValueFill, "maximum volume fills the entire field");
             input.BeginPointer(0); input.MovePointer(-1000, false); input.EndPointer();
             check(input.Value == 0, "volume drag clamps to zero");
+            check(input.ValueFillFraction == 0 && ((Border)input.Content).Background == PencilPalette.Surface, "zero volume leaves the field unfilled");
             input.BeginPointer(0); input.EndPointer();
             check(input.IsEditing, "click without dragging opens direct text input");
             input.Editor.Text = "125%"; check(input.TryCommitText() && input.Value == 1.25 && !input.IsEditing, "direct percent input parses and commits");
+            check(input.ValueFillFraction == .625, "direct numeric entry updates the fill proportion");
             var count = commits;
             input.BeginTextEdit(); input.Editor.Text = "NaN";
             check(!input.TryCommitText() && input.IsEditing && input.Value == 1.25 && commits == count, "invalid or nonfinite text stays editable without corrupting data");
@@ -43,15 +51,18 @@ internal static class StudioControlsTests
             check(input.Value == 0, "direct input obeys bounds");
             input.Value = 1; input.IsMixed = true;
             input.BeginPointer(0); input.MovePointer(20, false); input.CancelEdit();
-            check(input.Value == 1 && input.DisplayText == "?", "cancelled mixed scrub restores mixed state");
+            check(input.Value == 1 && input.DisplayText == "??", "cancelled mixed scrub restores mixed state");
+            check(input.ValueFillFraction == 0, "mixed values hide the fill rather than implying a shared value");
             input.BeginTextEdit(); input.Editor.Text = "100"; count = commits; input.TryCommitText();
             check(!input.IsMixed && commits == count + 1, "typing existing base value still unifies mixed values");
             input.Value = .75; check(commits == count + 1, "programmatic refresh never emits a user commit");
             input.BeginPointer(0); input.MovePointer(10, false); input.IsEnabled = false;
             check(input.Value == .75 && !input.IsScrubbing, "disabling mid-drag cancels unsaved preview");
+            check(input.ValueFillFraction == .375, "cancelled preview restores the previous fill proportion");
             input.IsEnabled = true;
 
-            var speed = new NumericDragInput { Value = 1, Minimum = .25, Maximum = 3, DecimalPlaces = 2, UnitsPerPixel = .01, Suffix = "×" };
+            var speed = new NumericDragInput { Value = 1, ShowValueFill = true, Minimum = .25, Maximum = 3, DecimalPlaces = 2, UnitsPerPixel = .01, Suffix = "×" };
+            check(Math.Abs(speed.ValueFillFraction - .75 / 2.75) < .00001, "speed fill maps its 0.25 to 3 times range");
             host.Content = speed;
             speed.BeginPointer(0); speed.MovePointer(25, false); speed.EndPointer();
             check(speed.Value == 1.25 && speed.DisplayText == "1.25×", "speed scrub retains fractional precision");
@@ -59,6 +70,11 @@ internal static class StudioControlsTests
             check(speed.Value == 2.75, "direct speed input accepts unit suffix");
             speed.BeginTextEdit(); speed.Editor.Text = "Infinity";
             check(!speed.TryCommitText(), "infinite speed rejected"); speed.CancelEdit();
+            speed.Value = .25; check(speed.ValueFillFraction == 0, "minimum speed has no fill");
+            speed.Value = 3; check(speed.ValueFillFraction == 1, "maximum speed has full fill");
+            speed.Maximum = 5.75; check(speed.ValueFillFraction == .5, "range updates refresh the fill without changing the value");
+            speed.ShowValueFill = false; check(speed.ValueFillFraction == 0, "other numeric fields can retain the plain background");
+            speed.ShowValueFill = true; speed.IsMixed = true; check(speed.ValueFillFraction == 0, "mixed speed hides its fill");
         }
         finally { host.Close(); }
     }
@@ -95,7 +111,7 @@ internal static class StudioControlsTests
         seconds = 10000; check(loaded.Score("a") == savedScore, "preference survives restart without counting offline time");
         loaded.Track(library.Selected); seconds = 20000;
         check(loaded.Score("a") == savedScore + 60, "long suspension gap is capped rather than counted in full");
-        var store = new LibraryStore(Path.Combine(dir, "usage-history.json"));
+        var store = TestLibrary.Create(Path.Combine(dir, "usage-history.json"));
         var history = new LibraryHistory(store);
         history.Commit("sort", () => store.Library.InstalledSort = "name"); history.Undo();
         check(new LibraryUsage(path, () => seconds).Score("a") == savedScore, "undo snapshots do not rewind separately stored preference statistics");
@@ -105,7 +121,7 @@ internal static class StudioControlsTests
     }
     private static void SortUi(Action<bool, string> check, string dir)
     {
-        var file = Path.Combine(dir, "sort-ui.json"); var store = new LibraryStore(file);
+        var file = Path.Combine(dir, "sort-ui.json"); var store = TestLibrary.Create(file);
         var dashboard = new LibraryDashboard(); dashboard.Initialize(store, new CustomizationManager());
         var host = new Window { Content = dashboard, Width = 1220, Height = 900, ShowInTaskbar = false, ShowActivated = false };
         try
@@ -134,7 +150,7 @@ internal static class StudioControlsTests
     }
     private static void CardActions(Action<bool, string> check, string dir)
     {
-        var file = Path.Combine(dir, "card-actions.json"); var store = new LibraryStore(file);
+        var file = Path.Combine(dir, "card-actions.json"); var store = TestLibrary.Create(file);
         var dashboard = new LibraryDashboard(); dashboard.Initialize(store, new CustomizationManager());
         var host = new Window { Content = dashboard, Width = 1220, Height = 900, ShowInTaskbar = false, ShowActivated = false };
         try
@@ -179,21 +195,44 @@ internal static class StudioControlsTests
     }
     private static void Settings(Action<bool, string> check)
     {
-        var window = new SettingsWindow(new CustomizationManager()) { ShowActivated = false, ShowInTaskbar = false };
+        var manager = new CustomizationManager();
+        var originalTopmost = manager.Configuration.Global.AlwaysOnTop;
+        var window = new SettingsWindow(manager) { ShowActivated = false, ShowInTaskbar = false };
+        check(window.Title == "Agent Mascot · 앱 설정", "unified settings title uses Agent Mascot");
         try
         {
             window.Show(); window.UpdateLayout();
-            var all = Descendants(window).ToArray();
+            check(window.Pages.Items.Cast<TabItem>().Select(t => (string)t.Header).SequenceEqual(new[] { "일반", "알림", "정보" }), "standalone settings excludes legacy asset/theme tab");
+            var seen = new List<DependencyObject>();
+            var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
+            foreach (TabItem tab in window.Pages.Items)
+            {
+                window.Pages.SelectedItem = tab; window.UpdateLayout();
+                seen.AddRange(Descendants(window));
+                if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(window, Path.ChangeExtension(screenshot, ".settings-" + tab.Header + ".png"));
+            }
+            var all = seen.Distinct().ToArray();
             var buttons = all.OfType<Button>().Select(b => b.Content?.ToString() ?? "").ToArray();
-            var checks = all.OfType<CheckBox>().Select(c => c.Content?.ToString() ?? "").ToArray();
+            var checks = all.OfType<ComboBox>().Select(c => c.Tag?.ToString() ?? "").ToArray();
             var numbers = all.OfType<NumericDragInput>().Select(n => n.Label).ToArray();
             check(!buttons.Any(b => b.Contains("테스트") || b.Contains("위치") || b.Contains("이미지")) && !numbers.Any(n => n.Contains("볼륨") || n.Contains("속도")), "common settings excludes studio media, preview, position, volume and playback-speed controls");
-            check(checks.Contains("전체 알림 소리 사용") && checks.Contains("Windows 로그인 시 시작") && checks.Contains("항상 위"), "global notification and startup options remain accessible");
-            check(numbers.Contains("모든 마스코트 크기") && !numbers.Any(n => n.Contains("표시 시간")) && buttons.Contains("공통 알림음 선택"), "common scale and sound remain while image duration is edited only in studio");
-            var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
+            check(!checks.Contains("전체 알림 소리 사용") && checks.Contains("Windows 로그인 시 시작") && checks.Contains("항상 위"), "global sound is removed while startup and window options remain");
+            check(!numbers.Any(n => n.Contains("크기") || n.Contains("표시 시간")) && !buttons.Any(b => b.Contains("알림음") || b.Contains("테마") || b.Contains("assets")), "audio and asset editing belongs only to mascot library");
+            window.Pages.SelectedIndex = 0; window.UpdateLayout();
             if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(window, Path.ChangeExtension(screenshot, ".settings.png"));
+            var saves = 0;
+            window.Saved += (_, _) => saves++;
+            var topmost = all.OfType<ComboBox>().Single(c => c.Tag?.ToString() == "항상 위");
+            topmost.SelectedIndex = originalTopmost ? 1 : 0;
+            check(manager.Configuration.Global.AlwaysOnTop != originalTopmost && new CustomizationManager().Configuration.Global.AlwaysOnTop != originalTopmost && saves == 1, "settings dropdown saves immediately and notifies the app once");
+            window.Width = window.MinWidth; window.Height = window.MinHeight;
+            window.Pages.SelectedIndex = 1; window.UpdateLayout();
+            var close = Descendants(window).OfType<Button>().Single(b => b.Content?.ToString() == "닫기");
+            var bottom = close.TranslatePoint(new Point(0, close.ActualHeight), window);
+            check(close.IsVisible && bottom.Y <= window.ActualHeight, "settings footer remains visible at minimum window size");
+            if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(window, Path.ChangeExtension(screenshot, ".settings-compact.png"));
         }
-        finally { window.Close(); }
+        finally { window.Close(); manager.Configuration.Global.AlwaysOnTop = originalTopmost; manager.Save(); }
     }
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
     {

@@ -3,6 +3,7 @@ namespace CodexMascot.Core;
 public sealed class MascotLibrary
 {
     public int FolderLayoutVersion { get; set; }
+    public int AudioLayoutVersion { get; set; }
     public double InstalledPanelRatio { get; set; } = 4.0 / 7;
     public string InstalledSort { get; set; } = "installed";
     public List<LibraryMascot> Installed { get; set; } = new();
@@ -41,23 +42,28 @@ public sealed class LibraryMascot
     public Dictionary<string, LibraryEventMedia> States { get; set; } = new();
     public double Volume { get; set; } = 1;
     public double Speed { get; set; } = 1;
+    // Null retains the legacy application-wide size until this mascot is edited.
+    public double? Scale { get; set; }
     public bool Loop { get; set; }
     public List<string> Events { get; set; } = new() { "running", "needsAttention", "completed", "failed", "interrupted" };
     public string Position { get; set; } = "bottom-right";
     public string? MonitorDevice { get; set; }
+    // "custom" keeps legacy top-left coordinates; "custom-center" stores the media center.
     public double? CustomLeft { get; set; }
     public double? CustomTop { get; set; }
 
     public LibraryEventMedia For(MascotState state) => States[MascotConfiguration.StateKey(state)];
     public MascotPlaybackSettings Settings(MascotState state) => For(state).Playback ??= new()
     {
-        Volume = Volume, Speed = Speed, Loop = Loop, Position = Position,
+        Volume = Volume, Speed = Speed, Scale = Scale, Loop = Loop, Position = Position,
         MonitorDevice = MonitorDevice, CustomLeft = CustomLeft, CustomTop = CustomTop
     };
 }
 
 public sealed class MascotPlaybackSettings
 {
+    public bool? HoldUntilClick { get; set; }
+    public double? Scale { get; set; }
     // Null preserves the legacy event duration. Only image playback uses this override.
     public int? ImageDurationMs { get; set; }
     public double Volume { get; set; } = 1;
@@ -65,6 +71,7 @@ public sealed class MascotPlaybackSettings
     public bool Loop { get; set; }
     public string Position { get; set; } = "bottom-right";
     public string? MonitorDevice { get; set; }
+    // The coordinate meaning follows Position, as with LibraryMascot.
     public double? CustomLeft { get; set; }
     public double? CustomTop { get; set; }
 }
@@ -72,6 +79,11 @@ public sealed class MascotPlaybackSettings
 public sealed class LibraryEventMedia
 {
     public string? Image { get; set; }
+    public string? Sound { get; set; }
+    public List<string> Sounds { get; set; } = new();
+    public IReadOnlyList<string> SoundCandidates() => Sounds is { Count: > 0 }
+        ? Sounds.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+        : string.IsNullOrWhiteSpace(Sound) ? Array.Empty<string>() : new[] { Sound };
     public bool SoundEnabled { get; set; } = true;
     public MascotPlaybackSettings? Playback { get; set; }
     public int SpriteColumns { get; set; } = 1;

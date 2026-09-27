@@ -20,7 +20,7 @@ internal static class StudioInteractionTests
     private static void RunCore(Action<bool, string> check, string dir)
     {
         var file = Path.Combine(dir, "studio-interaction.json");
-        var store = new LibraryStore(file); var manager = new CustomizationManager();
+        var store = TestLibrary.Create(file); var manager = new CustomizationManager();
         var dashboard = new LibraryDashboard(); dashboard.Initialize(store, manager);
         var host = new Window { Content = dashboard, Width = 1220, Height = 900, ShowInTaskbar = false, ShowActivated = false };
         T Control<T>(string name) => (T)dashboard.FindName(name);
@@ -58,11 +58,11 @@ internal static class StudioInteractionTests
                 var p1 = new Point(area.Left + 100, area.Top + 100);
                 var p2 = new Point(area.Left + 140, area.Top + 130);
                 overlay.BeginPlacementDrag(); Move(overlay, p1);
-                check(x.Value == p1.X && y.Value == p1.Y, "X/Y follow live physical screen position before mouse release");
+                check(new Point(x.Value, y.Value) == overlay.DesktopCenter, "X/Y follow the media center during native dragging");
                 Move(overlay, p2);
-                check(x.Value == p2.X && y.Value == p2.Y && store.Snapshot() == beforeDrag, "continued dragging updates coordinates without generating per-pixel saves");
+                check(new Point(x.Value, y.Value) == overlay.DesktopCenter && store.Snapshot() == beforeDrag, "continued dragging updates center coordinates without generating per-pixel saves");
                 overlay.CompletePlacementDrag();
-                check(Second().Settings(MascotState.Completed).CustomLeft == p2.X && store.Library.Find(firstId)!.Settings(MascotState.Completed).CustomLeft is null, "drag release saves only inspected selected instance");
+                check(Second().Settings(MascotState.Completed).CustomLeft == overlay.DesktopCenter.X && Second().Settings(MascotState.Completed).Position == "custom-center" && store.Library.Find(firstId)!.Settings(MascotState.Completed).CustomLeft is null, "drag release saves only inspected selected instance's center");
                 var settled = store.Snapshot();
                 overlay.BeginPlacementDrag(); Move(overlay, p1); Move(overlay, p2); overlay.CompletePlacementDrag();
                 check(store.Snapshot() == settled, "cancelled drag returning to start does not persist a new edit");
@@ -82,17 +82,57 @@ internal static class StudioInteractionTests
                 check(overlay.DesktopPosition == new Point(expected.Left, expected.Top), "coordinate input updates the actual placement window");
                 var before = store.Snapshot();
                 x.BeginPointer(0); x.MovePointer(60, false);
-                check(x.Value == 240 && overlay.DesktopPosition.X == 240 && store.Snapshot() == before, "numeric coordinate drag moves preview live without saving before release");
+                check(x.Value == 240 && Math.Abs(overlay.DesktopCenter.X - 240) < 1 && store.Snapshot() == before, "numeric coordinate drag moves preview center live without saving before release");
                 x.CancelEdit();
-                check(overlay.DesktopPosition.X == 180 && store.Snapshot() == before, "cancelled coordinate scrub restores original preview");
+                check(Math.Abs(overlay.DesktopCenter.X - 180) < 1 && store.Snapshot() == before, "cancelled coordinate scrub restores original preview center");
                 x.BeginPointer(0); x.MovePointer(30, false); x.EndPointer();
                 check(Second().Settings(MascotState.Completed).CustomLeft == 210, "coordinate scrub release persists final value");
             });
             dashboard.ReplayHistory(false);
             check(Second().Settings(MascotState.Completed).CustomLeft == 180, "coordinate scrub is one undo step");
+            var beforeSize = store.Snapshot();
+            var originalGlobalScale = manager.Configuration.Global.Scale;
+            check(LibraryStore.Placement(Second(), manager.Configuration.Global, MascotState.Completed).Scale == originalGlobalScale, "legacy size inherits the existing global configuration");
+            OpenPosition(dashboard, (dialog, overlay, x, y) =>
+            {
+                var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
+                var size = panel.Children.OfType<NumericDragInput>().Single(n => n.Name == "PositionScale");
+                dialog.UpdateLayout();
+                check(size.ShowValueFill && size.Minimum == .4 && size.Maximum == 3 && size.TranslatePoint(new Point(), panel).Y > y.TranslatePoint(new Point(0, y.ActualHeight), panel).Y, "gray size bar sits below the shared X/Y row and supports 40 to 300 percent");
+                var fixedCenter = overlay.DesktopCenter; var fixedCoordinates = new Point(x.Value, y.Value);
+                size.BeginPointer(0); size.MovePointer(40, false); Pump();
+                check(store.Snapshot() == beforeSize && Math.Abs(overlay.Width - 260 * size.Value) < 2, "size scrub resizes the actual preview before persisting");
+                check((overlay.DesktopCenter - fixedCenter).Length < 1 && new Point(x.Value, y.Value) == fixedCoordinates, "resizing fixes both the actual media center and the displayed coordinates");
+                size.CancelEdit(); Pump();
+                check(size.Value == originalGlobalScale && store.Snapshot() == beforeSize, "cancelling size drag restores preview without saving");
+                size.BeginTextEdit(); size.Editor.Text = "160%"; size.TryCommitText(); Pump();
+                check(CustomizationManager.States.All(s => Second().Settings(s).Scale == 1.6) && Second().Scale == 1.6, "whole-scope size saves all states and the inspected copy's default");
+                check(store.Library.Find(firstId)!.Scale is null && store.Library.Installed.Single(m => m.Id == "bot").Scale is null && manager.Configuration.Global.Scale == originalGlobalScale, "size edits leave sibling copies, installed template and legacy global size unchanged");
+                var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
+                if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(dialog, Path.ChangeExtension(screenshot, ".size.png"));
+            });
+            check(new LibraryStore(file).Library.Find(secondId)!.Settings(MascotState.Completed).Scale == 1.6, "per-copy size survives save and reload");
+            dashboard.ReplayHistory(false); check(store.Snapshot() == beforeSize, "size edit is one reversible history entry");
+            dashboard.ReplayHistory(true); check(Second().Scale == 1.6, "redo restores size");
+            Click("StateSettingsButton");
+            OpenPosition(dashboard, (dialog, _, _, _) =>
+            {
+                var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
+                panel.Children.OfType<NumericDragInput>().Single().CommitValue(.8);
+            });
+            check(Second().Settings(MascotState.Completed).Scale == .8 && Second().Settings(MascotState.Running).Scale == 1.6, "individual size affects only the selected event");
+            Click("StateSettingsButton");
+            check(Control<Button>("PositionButton").Content.ToString() == "위치 크기 변경 ??", "mixed sizes mark the placement button with double question marks");
+            OpenPosition(dashboard, (dialog, _, _, _) =>
+            {
+                var size = ((StackPanel)((ScrollViewer)dialog.Content).Content).Children.OfType<NumericDragInput>().Single();
+                check(size.DisplayText == "??" && size.ValueFillFraction == 0, "mixed size hides fill and displays double question marks");
+                size.CommitValue(1.2);
+            });
+            check(CustomizationManager.States.All(s => Second().Settings(s).Scale == 1.2), "whole-scope size unifies mixed event sizes");
             var beforeReset = store.Snapshot(); var cover = Second().CoverImage;
             Click("ResetSettingsButton");
-            check(CustomizationManager.States.All(s => Second().Settings(s).Volume == 1 && Second().Settings(s).Speed == 1 && Second().Settings(s).Position == "bottom-right" && !Second().Settings(s).Loop), "reset restores all state settings to defaults");
+            check(CustomizationManager.States.All(s => Second().Settings(s).Volume == 1 && Second().Settings(s).Speed == 1 && Second().Settings(s).Scale == 1 && Second().Settings(s).Position == "bottom-right" && !Second().Settings(s).Loop), "reset restores all state settings including size to defaults");
             check(Second().CoverImage == cover && store.Library.Selected.Count == 2 && Control<TextBlock>("Feedback").Text.Contains("초기화"), "reset preserves media and selections and records history description");
             dashboard.ReplayHistory(false);
             check(store.Snapshot() == beforeReset, "reset is fully reversible in one undo step");
@@ -129,6 +169,7 @@ internal static class StudioInteractionTests
         group.Show(store, manager, MascotState.Completed, false);
         check(group.Windows.Count == copies.Length && group.Windows.All(w => w.IsPresenting && !w.PlacementMode), "every selected duplicate presents simultaneously in an independent locked window");
         check(group.Windows.Select(w => w.DesktopPosition).Distinct().Count() == copies.Length, "simultaneous copies use independent positions");
+        check(group.Windows.Select(w => w.Width).Distinct().Count() == copies.Length, "simultaneous copies apply their independent sizes to actual playback windows");
         if (!string.IsNullOrWhiteSpace(fixture))
         {
             for (var attempt = 0; attempt < 50 && group.Windows.Any(w => ((MediaElement)w.FindName("MascotVideo")).NaturalVideoWidth == 0); attempt++) Pump(100);
@@ -152,7 +193,7 @@ internal static class StudioInteractionTests
         Exception? failure = null;
         Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
         {
-            var dialog = Application.Current.Windows.OfType<Window>().Single(w => w.Title == "위치 선택");
+            var dialog = Application.Current.Windows.OfType<Window>().Single(w => w.Title == "위치 크기 변경");
             try
             {
                 var overlay = Application.Current.Windows.OfType<OverlayWindow>().Single(w => w.Owner == dialog);

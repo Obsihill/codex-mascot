@@ -32,12 +32,18 @@ internal sealed class MascotFolderLibrary
             {
                 entry.CoverImage = CopyMedia(entry.CoverImage, "cover", folder, imported);
                 foreach (var (state, media) in entry.States)
+                {
                     media.Image = CopyMedia(media.Image, SafeSlot(state), folder, imported);
+                    media.Sound = CopyMedia(media.Sound, SafeSlot(state) + "-sound", folder, imported);
+                    media.Sounds = (media.Sounds ?? new()).Select(s => CopyMedia(s, SafeSlot(state) + "-sound", folder, imported)!).ToList();
+                }
             }
             var portable = JsonSerializer.Deserialize<LibraryMascot>(JsonSerializer.Serialize(mascot))!;
             portable.SourceId = null;
             portable.CoverImage = RelativeMedia(portable.CoverImage, folder);
-            foreach (var media in portable.States.Values) media.Image = RelativeMedia(media.Image, folder);
+            foreach (var media in portable.States.Values)
+            { media.Image = RelativeMedia(media.Image, folder); media.Sound = RelativeMedia(media.Sound, folder);
+                media.Sounds = media.Sounds.Select(s => RelativeMedia(s, folder)!).ToList(); }
             manifests.Add((Path.Combine(folder, "mascot.json"), JsonSerializer.Serialize(new { format = "codex-mascot", version = 1, mascot = portable }, Options)));
         }
         // Do not replace manifests until every referenced asset has been copied.
@@ -53,18 +59,19 @@ internal sealed class MascotFolderLibrary
     private static string? CopyMedia(string? source, string slot, string folder, Dictionary<string, string> imported)
     {
         if (string.IsNullOrWhiteSpace(source)) return source;
-        var builtin = source.StartsWith("builtin:", StringComparison.Ordinal);
+        var tone = source.StartsWith("builtin-sound:", StringComparison.Ordinal);
+        var builtin = tone || source.StartsWith("builtin:", StringComparison.Ordinal);
         var full = builtin ? source : Resolve(source);
         if (imported.TryGetValue(full, out var cached)) return cached;
         if (!builtin && !File.Exists(full)) throw new FileNotFoundException("마스코트 파일을 찾을 수 없습니다. 기존 파일과 설정은 유지됩니다.", full);
         if (!builtin && full.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             return imported[full] = AssetPath(full);
 
-        byte[]? png = builtin ? RenderBuiltin(source[8..]) : null;
+        byte[]? png = tone ? DemoMascotSound.Create(source[14..]) : builtin ? RenderBuiltin(source[8..]) : null;
         string hash;
         if (png is not null) hash = Convert.ToHexString(SHA256.HashData(png)).ToLowerInvariant();
         else { using var stream = File.OpenRead(full); hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant(); }
-        var extension = builtin ? ".png" : Path.GetExtension(full).ToLowerInvariant();
+        var extension = tone ? ".wav" : builtin ? ".png" : Path.GetExtension(full).ToLowerInvariant();
         var mediaFolder = Path.Combine(folder, "media"); Directory.CreateDirectory(mediaFolder);
         var destination = Path.Combine(mediaFolder, slot + "-" + hash + extension);
         if (!File.Exists(destination))

@@ -9,7 +9,7 @@ internal static class FolderLibraryTests
     public static void Run(Action<bool, string> check, string dir)
     {
         var file = Path.Combine(dir, "folder-library.json");
-        var store = new LibraryStore(file);
+        var store = TestLibrary.Create(file);
         var folders = new MascotFolderLibrary(store.LibraryDirectory);
         var manager = new CustomizationManager();
         check(store.Library.FolderLayoutVersion == 1 && Directory.GetDirectories(store.LibraryDirectory).Length == 7, "fresh library stores every installed mascot in its own folder");
@@ -59,7 +59,7 @@ internal static class FolderLibraryTests
         _ = new LibraryStore(legacyFile);
         check(Directory.GetFiles(dir, "old-folder-migration.json.before-folders-*").Length == 1, "successful migration is not repeated on each startup");
         var legacyFolder = new MascotFolderLibrary(migrated.LibraryDirectory).PackageDirectory("legacy");
-        check(Directory.GetFiles(Path.Combine(legacyFolder, "media")).Length == 1, "shared cover/state source is copied only once per package");
+        check(Directory.GetFiles(Path.Combine(legacyFolder, "media"), "*.png").Length == 1, "shared cover/state image source is copied only once per package alongside migrated sounds");
         var moved = Path.Combine(dir, "portable-mascot"); Directory.CreateDirectory(moved);
         foreach (var path in Directory.EnumerateFiles(legacyFolder, "*", SearchOption.AllDirectories))
         {

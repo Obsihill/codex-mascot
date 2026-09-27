@@ -45,7 +45,7 @@
 배포판은 자체 런타임을 포함합니다. 숨겨진 진단 명령으로 창 없이 기본 이미지 로드와 실제 기록 감시 초기화를 확인할 수 있습니다:
 
 ```powershell
-CodexMascot.App.exe --diagnose report.json "C:\Users\사용자\.codex"
+AgentMascot.exe --diagnose report.json "C:\Users\사용자\.codex"
 ```
 
 진단은 Codex 대화를 시작·재개하지 않으며 원문 대화 내용을 결과에 기록하지 않습니다.

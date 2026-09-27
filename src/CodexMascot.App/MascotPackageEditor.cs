@@ -10,6 +10,7 @@ internal sealed class MascotPackageEditor : Window
     private readonly CustomizationManager _manager;
     private readonly LibraryMascot? _original;
     private readonly Dictionary<string, string?> _paths = new();
+    private readonly Dictionary<string, string[]> _soundChoices = new();
     private readonly HashSet<string> _changed = new();
     private readonly TextBox _name = new() { Margin = new Thickness(0, 6, 0, 18) };
     private readonly TextBlock _error = new() { Foreground = Brushes.Firebrick, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 12) };
@@ -21,11 +22,12 @@ internal sealed class MascotPackageEditor : Window
     public MascotPackageEditor(CustomizationManager manager, LibraryMascot? original)
     {
         _manager = manager; _original = original;
-        Title = original is null ? "마스코트 등록" : "이미지 구성";
+        Title = original is null ? "마스코트 등록" : "미디어 구성";
         Width = 520; SizeToContent = SizeToContent.Height; MaxHeight = SystemParameters.WorkArea.Height - 40;
         ResizeMode = ResizeMode.NoResize; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = PencilPalette.Paper; Foreground = PencilPalette.Ink;
-        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/CodexMascot.App;component/PencilTheme.xaml", UriKind.Relative) });
+        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/AgentMascot;component/PencilTheme.xaml", UriKind.Relative) });
+        PencilWindow.Apply(this);
         Pencil.SetIcon(_importButton, PencilIconKind.Add);
         var root = new StackPanel { Margin = new Thickness(24) };
         Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -42,12 +44,15 @@ internal sealed class MascotPackageEditor : Window
         panel.Children.Add(new TextBlock { Text = "이름" }); _name.Text = original?.Name ?? ""; panel.Children.Add(_name);
         AddSlot(panel, "cover", "대표 이미지", original?.CoverImage);
         foreach (var state in CustomizationManager.States)
+        {
             AddSlot(panel, MascotConfiguration.StateKey(state), MainWindow.StateName(state), original?.For(state).Image);
+            AddSoundSlot(panel, MascotConfiguration.StateKey(state) + ".sound", original?.For(state).SoundCandidates().ToArray() ?? Array.Empty<string>());
+        }
         var save = new Button { Content = original is null ? "등록" : "저장" };
         Pencil.SetIcon(save, PencilIconKind.Add);
         save.Click += (_, _) =>
         {
-            try { Result = BuildPackage(_name.Text, _paths, _changed, _manager, _original); DialogResult = true; }
+            try { Result = BuildPackage(_name.Text, _paths, _changed, _manager, _original, _soundChoices); DialogResult = true; }
             catch (Exception ex) { _error.Text = ex.Message; }
         };
         panel.Children.Add(save);
@@ -105,7 +110,7 @@ internal sealed class MascotPackageEditor : Window
         var image = new Image { Height = 54, Width = 54, Stretch = Stretch.Uniform };
         var box = new PencilBorder { Background = PencilPalette.Inset, Child = image }; row.Children.Add(box);
         var caption = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 8, 0) }; Grid.SetColumn(caption, 1); row.Children.Add(caption);
-        var pick = new Button { Content = "선택", VerticalAlignment = VerticalAlignment.Center }; Grid.SetColumn(pick, 2); row.Children.Add(pick);
+        var pick = new Button { Content = key == "cover" ? "이미지" : "이미지 / 영상", VerticalAlignment = VerticalAlignment.Center }; Grid.SetColumn(pick, 2); row.Children.Add(pick);
         void Refresh()
         {
             var value = _paths[key];
@@ -130,8 +135,35 @@ internal sealed class MascotPackageEditor : Window
         };
         panel.Children.Add(row);
     }
+    private void AddSoundSlot(StackPanel panel, string key, string[] paths)
+    {
+        _soundChoices[key] = paths;
+        var row = new DockPanel { Margin = new Thickness(62, 0, 0, 16) };
+        var pick = new Button { Content = "소리", Name = key.Replace(".", "_") + "Pick" };
+        var clear = new Button { Content = "제거" };
+        Pencil.SetIcon(pick, PencilIconKind.Volume); Pencil.SetIcon(clear, PencilIconKind.Remove);
+        DockPanel.SetDock(clear, Dock.Right); row.Children.Add(clear);
+        DockPanel.SetDock(pick, Dock.Right); row.Children.Add(pick);
+        var name = new TextBlock { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(10, 0, 6, 0) };
+        row.Children.Add(name);
+        void Refresh()
+        {
+            var values = _soundChoices[key];
+            name.Text = values.Length switch { 0 => "별도 소리 없음", 1 => Path.GetFileName(values[0]), _ => $"소리 {values.Length}개 · 랜덤" };
+            name.ToolTip = string.Join("\n", values.Select(Path.GetFileName));
+        }
+        pick.Click += (_, _) =>
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog { Title = "소리 선택 — 여러 개 선택 시 랜덤 재생", Filter = "소리|*.wav;*.mp3", Multiselect = true };
+            if (dialog.ShowDialog(this) != true) return;
+            try { foreach (var path in dialog.FileNames) ValidateSound(path); _soundChoices[key] = dialog.FileNames; _changed.Add(key); Refresh(); _error.Text = ""; }
+            catch (Exception ex) { _error.Text = ex.Message; }
+        };
+        clear.Click += (_, _) => { _soundChoices[key] = Array.Empty<string>(); _changed.Add(key); Refresh(); };
+        Refresh(); panel.Children.Add(row);
+    }
     internal static LibraryMascot BuildPackage(string name, IReadOnlyDictionary<string, string?> paths, IReadOnlySet<string> changed,
-        CustomizationManager manager, LibraryMascot? original = null)
+        CustomizationManager manager, LibraryMascot? original = null, IReadOnlyDictionary<string, string[]>? soundChoices = null)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("이름을 입력하세요.");
         var keys = new[] { "cover" }.Concat(CustomizationManager.States.Select(MascotConfiguration.StateKey)).ToArray();
@@ -142,6 +174,16 @@ internal sealed class MascotPackageEditor : Window
             if (path.StartsWith("builtin:", StringComparison.Ordinal)) continue;
             ValidateMedia(manager.ResolveAsset(path) ?? path, key == "cover");
         }
+        var selectedSounds = new Dictionary<string, string[]>();
+        foreach (var state in CustomizationManager.States)
+        {
+            var key = MascotConfiguration.StateKey(state) + ".sound";
+            var sounds = soundChoices is not null && soundChoices.TryGetValue(key, out var choices) ? choices :
+                paths.TryGetValue(key, out var value) ? (string.IsNullOrWhiteSpace(value) ? Array.Empty<string>() : new[] { value }) :
+                original?.For(state).SoundCandidates().ToArray() ?? Array.Empty<string>();
+            selectedSounds[key] = sounds.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            foreach (var sound in selectedSounds[key]) ValidateSound(manager.ResolveAsset(sound) ?? sound);
+        }
         var result = new LibraryMascot { Name = name.Trim(), InstalledAt = DateTimeOffset.UtcNow };
         foreach (var key in keys)
         {
@@ -149,6 +191,8 @@ internal sealed class MascotPackageEditor : Window
             if (key == "cover") { result.CoverImage = path; continue; }
             var old = original?.States.GetValueOrDefault(key);
             result.States[key] = new LibraryEventMedia { Image = path, SoundEnabled = old?.SoundEnabled ?? true,
+                Sounds = selectedSounds[key + ".sound"].ToList(),
+                Playback = old?.Playback,
                 SpriteColumns = changed.Contains(key) ? 1 : old?.SpriteColumns ?? 1,
                 SpriteRows = changed.Contains(key) ? 1 : old?.SpriteRows ?? 1,
                 FrameDurationMs = old?.FrameDurationMs ?? 100 };
@@ -160,5 +204,12 @@ internal sealed class MascotPackageEditor : Window
         if (!File.Exists(path)) throw new FileNotFoundException("파일을 찾을 수 없습니다.", path);
         if (cover && MascotMedia.IsVideo(path)) throw new InvalidOperationException("대표 이미지는 이미지 파일을 선택하세요.");
         if (!MascotMedia.IsVideo(path)) MascotImageLoader.Load(path, new());
+    }
+    internal static void ValidateSound(string path)
+    {
+        if (!File.Exists(path)) throw new FileNotFoundException("소리 파일을 찾을 수 없습니다.", path);
+        if (Path.GetExtension(path).ToLowerInvariant() is not (".wav" or ".mp3")) throw new InvalidDataException("WAV 또는 MP3 소리를 선택하세요.");
+        using var reader = new NAudio.Wave.AudioFileReader(path);
+        if (reader.TotalTime <= TimeSpan.Zero || reader.Read(new float[1024], 0, 1024) == 0) throw new InvalidDataException("재생 가능한 소리가 없습니다.");
     }
 }

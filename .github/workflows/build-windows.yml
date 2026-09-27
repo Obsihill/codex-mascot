@@ -40,17 +40,17 @@ jobs:
           --configuration Release
           --runtime win-x64
           --self-contained true
-          --output artifact/CodexMascot
+          --output artifact/AgentMascot
 
       - name: Add source documentation and license
         shell: pwsh
         run: |
-          Copy-Item README.md, VALIDATION.md, THIRD-PARTY-NOTICES.txt, LICENSE -Destination artifact/CodexMascot
+          Copy-Item README.md, VALIDATION.md, THIRD-PARTY-NOTICES.txt, LICENSE -Destination artifact/AgentMascot
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
-          name: CodexMascot-Windows-x64
-          path: artifact/CodexMascot
+          name: AgentMascot-Windows-x64
+          path: artifact/AgentMascot
           if-no-files-found: error
           retention-days: 30

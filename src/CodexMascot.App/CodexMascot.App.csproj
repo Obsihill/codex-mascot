@@ -1,6 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <AssemblyName>AgentMascot</AssemblyName>
+    <RootNamespace>CodexMascot.App</RootNamespace>
+    <AssemblyTitle>Agent Mascot</AssemblyTitle>
+    <Product>Agent Mascot</Product>
+    <Description>Desktop mascot notifications for Codex and Claude</Description>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
@@ -9,10 +14,16 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Branding\App.ico</ApplicationIcon>
     <Version>0.2.1</Version>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Fonts\NanumPenScript-Regular.ttf" />
+    <Resource Include="Branding\App.ico" />
+    <Resource Include="Branding\Tray.ico" />
+    <Resource Include="Branding\mas-cat-black.png" />
+    <Resource Include="..\..\assets\images\main.png" Link="Design\original.png" />
+    <Resource Include="..\..\assets\MasCat\main.png" Link="Design\mascat.png" />
     <Content Include="Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="CodexMascot.App.Tests" />
     <ProjectReference Include="..\CodexMascot.Core\CodexMascot.Core.csproj" />
