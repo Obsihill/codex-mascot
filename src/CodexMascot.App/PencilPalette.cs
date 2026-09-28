@@ -136,4 +136,3 @@ public sealed class PencilThemeColors : INotifyPropertyChanged
         return brushes;
     }
 }
-

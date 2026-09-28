@@ -18,7 +18,7 @@ GitHub Actions의 빌드 결과는 workflow의 Artifacts에서 `AgentMascot-Wind
 
 앱과 설치마법사는 한국어·영어를 지원합니다. 앱은 처음 실행 시 Windows 표시 언어가 한국어이면 한국어, 그 외에는 영어를 선택합니다. **설정 → 언어 / Language**에는 현재 적용된 언어가 표시되며 한국어·English 중 선택하면 열린 화면에 즉시 반영됩니다. **확인**은 변경 사항을 저장하고, **취소·X·Esc**는 원래 설정과 언어로 되돌립니다. Windows 자동 시작·연결·Hook 변경은 확인할 때 반영합니다. 두 언어 모두 내장 손글씨 폰트를 사용하며, 개인 마스코트 이름·경로·작업 내용은 번역하지 않습니다.
 
-English: Run `AgentMascot-Setup-0.2.3-win-x64.exe` to install (the .NET runtime is included), or extract the complete portable ZIP and run `AgentMascot.exe`. On first launch the app follows your Windows display language, with English as the fallback. In **Settings → 언어 / Language**, select **한국어 / English** for an immediate preview. **OK** saves changes; **Cancel**, **X**, or **Esc** restores the original settings and language. The handwritten font is bundled; no font installation is needed.
+English: Run `AgentMascot-Setup-<version>-win-x64.exe` to install (the .NET runtime is included), or extract the complete portable ZIP and run `AgentMascot.exe`. On first launch the app follows your Windows display language, with English as the fallback. In **Settings → 언어 / Language**, select **한국어 / English** for an immediate preview. **OK** saves changes; **Cancel**, **X**, or **Esc** restores the original settings and language. The handwritten font is bundled; no font installation is needed.
 
 설치마법사의 **Windows 로그인 시 시작**을 체크하면 로그인 시 트레이로 실행됩니다. 별도의 제거 바로 가기는 만들지 않으며, 기존 바로 가기는 업그레이드 시 정리합니다. 앱 제거는 Windows 설정의 **설치된 앱**에서 가능합니다.
 
