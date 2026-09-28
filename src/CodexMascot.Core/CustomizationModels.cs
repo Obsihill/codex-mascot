@@ -37,9 +37,12 @@ public sealed class MascotConfiguration
 
 public sealed class GlobalConfiguration
 {
+    // system, ko or en. UI preference only; never changes parsing or stored IDs.
+    public string Language { get; set; } = "system";
     public double Scale { get; set; } = 1.0;
     public string Position { get; set; } = "bottom-right";
     public bool AlwaysOnTop { get; set; } = true;
+    public bool HideBehindTaskbar { get; set; } = true;
     public bool ClickThrough { get; set; } = false;
     public bool KeepCompletedVisibleUntilClick { get; set; } = true;
     public bool BringCodexToFrontOnClick { get; set; } = true;
@@ -69,6 +72,11 @@ public sealed class StateConfiguration
 
 public sealed class MonitorConfiguration
 {
+    public bool AutoIncludeNewChats { get; set; } = true;
+    public List<ChatWatchEntry> Chats { get; set; } = new();
+    public bool AutoIncludeNewProjects { get; set; } = true;
+    public List<ProjectWatchEntry> Projects { get; set; } = new();
+    public int RecentSessionLimit { get; set; } = 100;
     public string? CodexHome { get; set; }
     public string? ClaudeHome { get; set; }
     // "codex", "claude" or "both": which agents the monitor watches.
@@ -77,4 +85,19 @@ public sealed class MonitorConfiguration
     public bool AutoStart { get; set; } = true;
     public string? CodexExecutable { get; set; }
     public List<string> RecentProjects { get; set; } = new();
+}
+
+public sealed class ProjectWatchEntry
+{
+    public string Path { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+}
+
+public sealed class ChatWatchEntry
+{
+    public AgentKind Agent { get; set; }
+    public string Id { get; set; } = "";
+    public string ProjectPath { get; set; } = "";
+    public string Title { get; set; } = "";
+    public bool Enabled { get; set; } = true;
 }

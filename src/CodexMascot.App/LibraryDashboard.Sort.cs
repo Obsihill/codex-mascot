@@ -15,7 +15,7 @@ public partial class LibraryDashboard
         _usage = new LibraryUsage(_store.UsagePath); _usage.Track(_store.Library.Selected);
         _loading = true;
         InstalledSort.DisplayMemberPath = nameof(SortChoice.Name); InstalledSort.SelectedValuePath = nameof(SortChoice.Key);
-        InstalledSort.ItemsSource = new[] { new SortChoice("이름", "name"), new SortChoice("설치 날짜", "installed"), new SortChoice("선호", "preference") };
+        InstalledSort.ItemsSource = new[] { new SortChoice(Loc.T("이름"), "name"), new SortChoice(Loc.T("설치 날짜"), "installed"), new SortChoice(Loc.T("선호"), "preference") };
         InstalledSort.SelectedValue = _store.Library.InstalledSort; _loading = false;
         _usageTimer.Tick += (_, _) =>
         {
@@ -29,12 +29,12 @@ public partial class LibraryDashboard
     private void SaveUsage()
     {
         try { _usage?.Save(); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Feedback.Text = "선호 기록 저장 실패: " + e.Message; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Feedback.Text = Loc.T("선호 기록 저장 실패: ") + e.Message; }
     }
     private void Sort_OnChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading || _store is null || InstalledSort.SelectedItem is not SortChoice sort) return;
-        Commit("설치됨 정렬 · " + sort.Name, () => _store.Library.InstalledSort = sort.Key);
+        Commit(Loc.T("설치됨 정렬 · ") + sort.Name, () => _store.Library.InstalledSort = sort.Key);
         RefreshLists();
     }
 }

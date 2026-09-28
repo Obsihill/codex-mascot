@@ -27,11 +27,11 @@ internal sealed class LibraryUsage
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
         {
-            Warning = "선호 기록을 읽지 못했습니다. " + e.Message;
+            Warning = Loc.T("선호 기록을 읽지 못했습니다. ") + e.Message;
             // Preserve corrupt data rather than overwriting the only copy.
             try { if (File.Exists(path)) File.Copy(path, path + ".backup-" + DateTime.Now.ToString("yyyyMMddHHmmssfff")); }
             catch (Exception backupError) when (backupError is IOException or UnauthorizedAccessException)
-            { Warning += " 백업 실패: " + backupError.Message; _canSave = false; }
+            { Warning += Loc.T(" 백업 실패: ") + backupError.Message; _canSave = false; }
         }
     }
     public void Track(IEnumerable<LibraryMascot> selected)

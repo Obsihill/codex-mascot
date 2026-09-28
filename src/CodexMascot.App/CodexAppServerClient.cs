@@ -31,7 +31,7 @@ public sealed class CodexAppServerClient : ICodexClient
             cwd = workingDirectory, approvalPolicy = "on-request",
             sandbox = ReadOnly ? "readOnly" : "workspaceWrite"
         }, cancellationToken);
-        _thread = thread.FindNestedString("thread", "id") ?? throw new InvalidDataException("thread/start 응답에 작업 ID가 없습니다.");
+        _thread = thread.FindNestedString("thread", "id") ?? throw new InvalidDataException(Loc.T("thread/start 응답에 작업 ID가 없습니다."));
         var args = new Dictionary<string, object?> { ["threadId"] = _thread, ["input"] = new[] { new { type = "text", text = prompt } } };
         if (!string.IsNullOrWhiteSpace(model)) args["model"] = model;
         var turn = await Request("turn/start", args, cancellationToken);
@@ -42,14 +42,14 @@ public sealed class CodexAppServerClient : ICodexClient
         => await Request("turn/interrupt", new { threadId, turnId }, cancellationToken);
     public async Task ApproveAsync(string requestId, bool accept, CancellationToken cancellationToken = default)
     {
-        if (!_requests.TryGetValue(requestId, out var request)) throw new InvalidOperationException("이미 해결되었거나 만료된 요청입니다.");
+        if (!_requests.TryGetValue(requestId, out var request)) throw new InvalidOperationException(Loc.T("이미 해결되었거나 만료된 요청입니다."));
         var method = request.GetStringOrNull("method");
         object result;
         if (method == "item/tool/requestUserInput")
             result = accept && GetUserInput is not null ? await GetUserInput(request.GetProperty("params")) ?? new { answers = new { } } : new { answers = new { } };
         else if (method is "item/commandExecution/requestApproval" or "item/fileChange/requestApproval")
             result = new { decision = accept ? "accept" : "decline" };
-        else throw new NotSupportedException("이 승인 형식은 아직 지원하지 않습니다: " + method);
+        else throw new NotSupportedException(Loc.T("이 승인 형식은 아직 지원하지 않습니다: ") + method);
         await Write(new { id = request.GetProperty("id"), result }, cancellationToken);
         _requests.TryRemove(requestId, out _);
     }
@@ -66,7 +66,7 @@ public sealed class CodexAppServerClient : ICodexClient
                 StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
             };
             info.ArgumentList.Add("app-server");
-            _process = Process.Start(info) ?? throw new InvalidOperationException("Codex 프로세스를 시작하지 못했습니다.");
+            _process = Process.Start(info) ?? throw new InvalidOperationException(Loc.T("Codex 프로세스를 시작하지 못했습니다."));
             _lifetime = new CancellationTokenSource();
             var process = _process;
             _reader = Task.Run(() => ReadLoop(process, _lifetime.Token));
@@ -94,7 +94,7 @@ public sealed class CodexAppServerClient : ICodexClient
             return await completion.Task.WaitAsync(timeout.Token);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        { throw new TimeoutException(method + " 응답이 25초 안에 오지 않았습니다. 중복 실행 방지를 위해 자동 재시도하지 않습니다."); }
+        { throw new TimeoutException(method + Loc.T(" 응답이 25초 안에 오지 않았습니다. 중복 실행 방지를 위해 자동 재시도하지 않습니다.")); }
         finally { _pending.TryRemove(id, out _); }
     }
     private async Task Write(object value, CancellationToken ct)
@@ -103,7 +103,7 @@ public sealed class CodexAppServerClient : ICodexClient
         try
         {
             var process = _process;
-            if (process is null || process.HasExited) throw new IOException("Codex 연결이 종료되었습니다.");
+            if (process is null || process.HasExited) throw new IOException(Loc.T("Codex 연결이 종료되었습니다."));
             await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(value).AsMemory(), ct);
             await process.StandardInput.FlushAsync(ct);
         }
@@ -111,7 +111,7 @@ public sealed class CodexAppServerClient : ICodexClient
     }
     private async Task ReadLoop(Process process, CancellationToken ct)
     {
-        string reason = "Codex 프로세스 연결 종료";
+        string reason = Loc.T("Codex 프로세스 연결 종료");
         try
         {
             while (await process.StandardOutput.ReadLineAsync(ct) is { } line)
@@ -140,7 +140,7 @@ public sealed class CodexAppServerClient : ICodexClient
                 Emit(e);
             }
         }
-        catch (OperationCanceledException) { reason = "연결 닫힘"; }
+        catch (OperationCanceledException) { reason = Loc.T("연결 닫힘"); }
         catch (Exception ex) { reason = ex.Message; }
         finally
         {

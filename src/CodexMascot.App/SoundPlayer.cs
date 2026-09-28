@@ -17,7 +17,7 @@ public sealed class SoundPlayerService : IDisposable
     {
         Stop();
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-        { Feedback?.Invoke(this, "사운드가 없거나 파일을 찾을 수 없습니다."); return false; }
+        { Feedback?.Invoke(this, Loc.T("사운드가 없거나 파일을 찾을 수 없습니다.")); return false; }
         try
         {
             _path = path; _reader = new AudioFileReader(path);
@@ -28,12 +28,12 @@ public sealed class SoundPlayerService : IDisposable
             output.PlaybackStopped += (_, e) =>
             {
                 if (ReferenceEquals(_output, output) && e.Exception is not null)
-                    Feedback?.Invoke(this, "사운드 재생 실패: " + e.Exception.Message);
+                    Feedback?.Invoke(this, Loc.T("사운드 재생 실패: ") + e.Exception.Message);
             };
             _output.Init(_gain.ToWaveProvider());
             return true;
         }
-        catch (Exception e) { Stop(); Feedback?.Invoke(this, "사운드 재생 실패: " + e.Message); return false; }
+        catch (Exception e) { Stop(); Feedback?.Invoke(this, Loc.T("사운드 재생 실패: ") + e.Message); return false; }
     }
     internal static ISampleProvider CreateRateProvider(ISampleProvider source, double speed)
     {
@@ -44,8 +44,8 @@ public sealed class SoundPlayerService : IDisposable
     internal void Start()
     {
         if (_output is null) return;
-        try { _output.Play(); Feedback?.Invoke(this, "사운드 재생 시작: " + Path.GetFileName(_path)); }
-        catch (Exception e) { Stop(); Feedback?.Invoke(this, "사운드 재생 실패: " + e.Message); }
+        try { _output.Play(); Feedback?.Invoke(this, Loc.T("사운드 재생 시작: ") + Path.GetFileName(_path)); }
+        catch (Exception e) { Stop(); Feedback?.Invoke(this, Loc.T("사운드 재생 실패: ") + e.Message); }
     }
     internal void SetVolume(double volume) { if (_gain is not null) _gain.Gain = volume; }
     public void Play(string? path, double volume, double speed = 1, TimeSpan? position = null)

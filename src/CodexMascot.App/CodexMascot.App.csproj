@@ -18,10 +18,13 @@
     <Version>0.2.3</Version>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Localization\en.json" />
     <Resource Include="Fonts\NanumPenScript-Regular.ttf" />
     <Resource Include="Branding\App.ico" />
-    <Resource Include="Branding\Tray.ico" />
+    <Resource Include="Branding\TrayDark.ico" />
+    <Resource Include="Branding\TrayLight.ico" />
     <Resource Include="Branding\mas-cat-black.png" />
+    <Resource Include="Branding\mas-cat.png" />
     <Resource Include="..\..\assets\images\main.png" Link="Design\original.png" />
     <Resource Include="..\..\assets\MasCat\main.png" Link="Design\mascat.png" />
     <Content Include="Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

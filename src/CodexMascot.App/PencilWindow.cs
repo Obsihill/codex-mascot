@@ -22,7 +22,9 @@ public static class PencilWindow
     {
         if ((bool)window.GetValue(AppliedProperty)) return;
         window.SetValue(AppliedProperty, true);
-        window.Icon = System.Windows.Media.Imaging.BitmapFrame.Create(AppBrand.IconUri);
+        window.Loaded += (_, _) => PencilPalette.BindTree(window);
+        BindingOperations.SetBinding(window, Window.IconProperty,
+            new Binding(nameof(WindowBrandTheme.Icon)) { Source = AppBrand.WindowTheme });
         window.SetResourceReference(FrameworkElement.StyleProperty, "PencilWindowStyle");
         var chrome = new WindowChrome { CaptionHeight = 40, GlassFrameThickness = new Thickness(0), CornerRadius = new CornerRadius(0), UseAeroCaptionButtons = false };
         BindingOperations.SetBinding(chrome, WindowChrome.ResizeBorderThicknessProperty, new Binding(nameof(Window.ResizeMode)) { Source = window, Converter = new PencilResizeBorderConverter() });

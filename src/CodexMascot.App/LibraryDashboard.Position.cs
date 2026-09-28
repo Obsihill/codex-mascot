@@ -29,14 +29,14 @@ public partial class LibraryDashboard
         panel.Children.Add(coordinates);
         var scale = new NumericDragInput
         {
-            Name = "PositionScale", Label = "크기", Value = global.Scale,
+            Name = "PositionScale", Label = Loc.T("크기"), Value = global.Scale,
             Minimum = .4, Maximum = 3, DisplayScale = 100, UnitsPerPixel = 1, Suffix = "%",
             ShowValueFill = true, Margin = new Thickness(0, 14, 0, 0),
             IsMixed = scope is null && CustomizationManager.States.Select(s => m.Settings(s).Scale ?? _manager.Configuration.Global.Scale).Distinct().Count() > 1
         };
         panel.Children.Add(scale);
-        var window = Dialog("위치 크기 변경", panel);
-        var error = new TextBlock { Foreground = Brushes.Firebrick, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
+        var window = Dialog(Loc.T("위치 크기 변경"), panel);
+        var error = new TextBlock { Foreground = PencilPalette.Danger, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
         panel.Children.Add(error);
         OverlayWindow? overlay = null;
         void UpdateCoordinates(Point point)
@@ -51,7 +51,7 @@ public partial class LibraryDashboard
         void CommitCoordinates()
         {
             if (!SavePosition(m.Id, scope, x.Value, y.Value))
-            { error.Text = "위치를 저장하지 못했습니다."; error.Visibility = Visibility.Visible; }
+            { error.Text = Loc.T("위치를 저장하지 못했습니다."); error.Visibility = Visibility.Visible; }
             else error.Visibility = Visibility.Collapsed;
         }
         void FinishInputs()
@@ -67,7 +67,7 @@ public partial class LibraryDashboard
         scale.ValueCommitted += (_, _) =>
         {
             if (!SaveScale(m.Id, scope, scale.Value))
-            { error.Text = "크기를 저장하지 못했습니다."; error.Visibility = Visibility.Visible; }
+            { error.Text = Loc.T("크기를 저장하지 못했습니다."); error.Visibility = Visibility.Visible; }
             else error.Visibility = Visibility.Collapsed;
         };
         x.ValuePreviewed += (_, _) => PreviewCoordinates(); y.ValuePreviewed += (_, _) => PreviewCoordinates();
@@ -83,7 +83,7 @@ public partial class LibraryDashboard
             overlay.PositionSaved += (_, _) =>
             {
                 if (!SavePosition(m.Id, scope, global.CustomLeft ?? 0, global.CustomTop ?? 0))
-                { error.Text = "위치를 저장하지 못했습니다."; error.Visibility = Visibility.Visible; }
+                { error.Text = Loc.T("위치를 저장하지 못했습니다."); error.Visibility = Visibility.Visible; }
             };
             var config = scope is null ? new StateConfiguration() : LibraryStore.Playback(m, state, _manager.Configuration.For(state));
             config.ShowDurationMs = 0; config.Volume = 0;

@@ -49,7 +49,8 @@ public sealed class StatusAggregator
                 j.State = MascotState.NeedsAttention;
                 break;
             case CodexEventKind.ServerRequestResolved:
-                if (e.RequestId is not null) j.Pending.Remove(e.RequestId);
+                if (e.Status == "asyncQuestions") j.Pending.RemoveWhere(id => id.StartsWith("async-question:", StringComparison.Ordinal));
+                else if (e.RequestId is not null) j.Pending.Remove(e.RequestId);
                 else j.Pending.Clear();
                 if (j.Pending.Count == 0 && j.State == MascotState.NeedsAttention)
                     j.State = j.TurnId is null ? MascotState.Idle : MascotState.Running;
@@ -60,9 +61,14 @@ public sealed class StatusAggregator
                     if (j.FinishedTurns.Count > 128) j.FinishedTurns.Clear();
                     j.FinishedTurns.Add(e.TurnId);
                 }
-                j.TurnId = null; j.Pending.Clear(); j.Unread = !e.IsReplay;
+                j.TurnId = null;
+                if (!e.IsReplay && e.Status is not ("failed" or "interrupted"))
+                    j.Pending.RemoveWhere(id => !id.StartsWith("async-question:", StringComparison.Ordinal));
+                else j.Pending.Clear();
+                j.Unread = !e.IsReplay;
                 j.State = e.IsReplay ? MascotState.Idle : e.Status switch
                 { "failed" => MascotState.Failed, "interrupted" => MascotState.Interrupted, _ => MascotState.Completed };
+                if (j.Pending.Count > 0) { j.State = MascotState.NeedsAttention; j.Unread = false; }
                 break;
             case CodexEventKind.ThreadStatusChanged:
                 if (e.Status is "unknown" or "disconnected")
@@ -104,7 +110,7 @@ public sealed class StatusAggregator
     private MascotState AggregateState()
     {
         if (_jobs.Values.Any(j => j.Pending.Count > 0)) return MascotState.NeedsAttention;
-        foreach (var state in new[] { MascotState.Failed, MascotState.Completed, MascotState.Interrupted })
+        foreach (var state in new[] { MascotState.Failed, MascotState.Interrupted, MascotState.Completed })
             if (_jobs.Values.Any(j => j.Unread && j.State == state)) return state;
         if (_jobs.Values.Any(j => j.State == MascotState.Running)) return MascotState.Running;
         if (_jobs.Values.Any(j => j.State == MascotState.Disconnected)) return MascotState.Disconnected;

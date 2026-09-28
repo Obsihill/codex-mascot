@@ -8,7 +8,7 @@ public static class InputRequestWindow
     public static object? Ask(Window owner, JsonElement parameters)
     {
         if (!parameters.TryGetProperty("questions", out var questions)) return null;
-        var window = new Window { Title = "Codex 질문에 답변", Owner = owner, Width = 560, Height = 500,
+        var window = new Window { Title = Loc.T("Codex 질문에 답변"), Owner = owner, Width = 560, Height = 500,
             WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = PencilPalette.Paper, Foreground = PencilPalette.Ink };
         window.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/AgentMascot;component/PencilTheme.xaml", UriKind.Relative) });
         PencilWindow.Apply(window);
@@ -23,7 +23,7 @@ public static class InputRequestWindow
                 panel.Children.Add(new TextBlock { Text = string.Join(" / ", options.EnumerateArray().Select(o => o.GetStringOrNull("label"))), Foreground = PencilPalette.Muted, TextWrapping = TextWrapping.Wrap });
             var input = new TextBox(); inputs[id] = input; panel.Children.Add(input);
         }
-        var submit = new Button { Content = "답변 보내기" };
+        var submit = new Button { Content = Loc.T("답변 보내기") };
         submit.Click += (_, _) => { window.DialogResult = true; };
         panel.Children.Add(submit);
         window.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };

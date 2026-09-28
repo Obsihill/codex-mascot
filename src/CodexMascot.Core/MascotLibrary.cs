@@ -62,6 +62,7 @@ public sealed class LibraryMascot
 
 public sealed class MascotPlaybackSettings
 {
+    public bool HideBehindTaskbar { get; set; } = true;
     public bool? HoldUntilClick { get; set; }
     public double? Scale { get; set; }
     // Null preserves the legacy event duration. Only image playback uses this override.

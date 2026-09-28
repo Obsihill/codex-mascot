@@ -21,6 +21,7 @@ internal static class Program
         Equal(MascotState.Running, popup.Resolve(jobs.State, false), "disabled hold follows live status");
         Equal(MascotState.NeedsAttention, popup.Resolve(MascotState.NeedsAttention, true), "approval overrides held completion");
         Equal(MascotState.Failed, popup.Resolve(MascotState.Failed, true), "failure overrides held completion");
+        Equal(MascotState.Interrupted, popup.Resolve(MascotState.Interrupted, true), "interruption overrides held completion");
         Equal(MascotState.Completed, popup.Resolve(MascotState.Idle, true), "held completion reappears after higher-priority state resolves");
         popup.Observe(jobs.Apply(E(CodexEventKind.TurnCompleted, job: "b", t: 3)).Jobs);
         popup.Acknowledge("a");
@@ -52,6 +53,10 @@ internal static class Program
             return;
         }
         TestCompletionPopup();
+        TestRecentLimit();
+        TestProjectSelection();
+        TestNotificationRegressions();
+        TestTranscriptQuestions();
         var a = new StatusAggregator();
         Equal(MascotState.Running, a.Apply(E(CodexEventKind.TurnStarted)).State, "start");
         Equal(MascotState.Completed, a.Apply(E(CodexEventKind.TurnCompleted, t: 1, status: "completed")).State, "complete");
@@ -86,6 +91,11 @@ internal static class Program
         Equal(CodexEventKind.TurnStarted, parsed.Kind, "actual task_started format");
         Equal(CodexEventKind.TurnCompleted, DesktopEventParser.ParseTranscript(Line("task_complete", "t"), identity)!.Kind, "actual task_complete format");
         Equal("interrupted", DesktopEventParser.ParseTranscript(Line("turn_aborted", "t"), identity)!.Status, "actual abort");
+        var failed = DesktopEventParser.ParseTranscript(Line("turn_failed", "t"), identity)!;
+        Equal(CodexEventKind.TurnCompleted, failed.Kind, "explicit failure terminates turn");
+        Equal(MascotState.Failed, new StatusAggregator().Apply(failed).State, "explicit failure reaches mascot state");
+        Equal(MascotState.Idle, new StatusAggregator().Apply(failed with { IsReplay = true }).State, "historical failure stays silent");
+        Equal(null, DesktopEventParser.ParseTranscript(Line("error", "t"), identity), "unspecified error is not guessed to be terminal");
         Equal(null, DesktopEventParser.ParseTranscript("{bad", identity), "bad JSON");
         Equal(null, DesktopEventParser.ParseTranscript("""{"type":"event_msg"}""", identity), "missing payload");
         Equal(null, DesktopEventParser.ReadIdentity("""{"type":"session_meta","payload":null}"""), "null metadata");
@@ -203,6 +213,178 @@ internal static class Program
         }
         finally { Directory.Delete(dir, true); }
         Console.WriteLine("PASS: " + _assertions + " assertions (aggregation, duplicate/late events, hooks, JSONL, real monitor fixture).");
+    }
+    private static void TestTranscriptQuestions()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "mascot-question-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(dir, "sessions"));
+        try
+        {
+            var path = Path.Combine(dir, "sessions", "fixture.jsonl");
+            string Call(string name, string id) => JsonSerializer.Serialize(new { type = "response_item",
+                timestamp = DateTimeOffset.UtcNow, payload = new { type = "function_call", name, call_id = id, arguments = "PRIVATE QUESTION" } });
+            string Output(string id, string output) => JsonSerializer.Serialize(new { type = "response_item",
+                timestamp = DateTimeOffset.UtcNow, payload = new { type = "function_call_output", call_id = id, output } });
+            File.WriteAllText(path, """{"type":"session_meta","payload":{"id":"question-session"}}""" + "\n" +
+                Line("task_started", "old") + "\n" + Call("request_user_input_async", "old") + "\n" + Line("task_complete", "old") + "\n");
+            var monitor = new DesktopSessionMonitor(dir, Path.Combine(dir, "no-hooks"));
+            var jobs = new StatusAggregator();
+            var events = new List<CodexEvent>();
+            monitor.EventReceived += (_, e) => { events.Add(e); jobs.Apply(e); };
+            monitor.Poll();
+            Equal(MascotState.Idle, jobs.State, "historical question does not alert");
+            void Append(string line) { File.AppendAllText(path, line + "\n"); monitor.Poll(); }
+            Append(Line("task_started", "live"));
+            Append(Call("request_user_input_async", "async"));
+            Equal(MascotState.NeedsAttention, jobs.State, "actual async question shape alerts without hooks");
+            var count = events.Count;
+            Append(Call("request_user_input_async", "async"));
+            Equal(count, events.Count, "duplicate question is ignored");
+            Append(Output("unrelated", "{}"));
+            Equal(MascotState.NeedsAttention, jobs.State, "unrelated tool result does not answer question");
+            Append(Output("async", "{\"accepted\":true}"));
+            Equal(MascotState.NeedsAttention, jobs.State, "async delivery acknowledgment is not an answer");
+            Append(Line("task_complete", "live"));
+            Equal(MascotState.NeedsAttention, jobs.State, "async question survives end of assistant turn");
+            jobs.Acknowledge();
+            Equal(MascotState.NeedsAttention, jobs.State, "click does not answer question");
+            Append(Line("user_message", "live"));
+            Equal(MascotState.Idle, jobs.State, "user follow-up clears async question after turn ends");
+            Append(Line("task_started", "sync-turn"));
+            Append(Call("functions.request_user_input", "sync"));
+            Equal(MascotState.NeedsAttention, jobs.State, "synchronous question alerts");
+            Append(Output("sync", "{\"answers\":{}}"));
+            Equal(MascotState.Running, jobs.State, "synchronous answer resumes running");
+            Append(Call("some_request_user_input_fake", "fake"));
+            Equal(MascotState.Running, jobs.State, "unrelated tool names are ignored");
+            Append(Call("request_user_input_async", "rejected"));
+            Append(Output("rejected", "{\"accepted\":false}"));
+            Equal(MascotState.Running, jobs.State, "rejected async request is cleared");
+            Append(Call("request_user_input_async", "failure"));
+            Append(Line("turn_failed", "sync-turn"));
+            Equal(MascotState.Failed, jobs.State, "failure clears pending async question");
+            Equal(false, events.Any(e => e.Message?.Contains("PRIVATE") == true), "question text is not copied to events");
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+    private static void TestNotificationRegressions()
+    {
+        var jobs = new StatusAggregator();
+        var popup = new CompletionPopupPolicy();
+        popup.Observe(jobs.Apply(E(CodexEventKind.TurnCompleted, job: "complete")).Jobs);
+        jobs.Apply(E(CodexEventKind.TurnCompleted, job: "interrupt", t: 1, status: "interrupted"));
+        Equal(MascotState.Interrupted, popup.Resolve(jobs.State, true), "another task's completion cannot mask interruption");
+        jobs.Acknowledge("interrupt");
+        Equal(MascotState.Completed, jobs.State, "pending completion survives interruption acknowledgement");
+        jobs.Apply(E(CodexEventKind.TurnCompleted, job: "failure", t: 2, status: "failed"));
+        Equal(MascotState.Failed, jobs.State, "failure remains above completed results");
+        jobs.Apply(E(CodexEventKind.ApprovalRequired, job: "approval", t: 3));
+        Equal(MascotState.NeedsAttention, jobs.State, "approval remains highest priority");
+
+        var dir = Path.Combine(Path.GetTempPath(), "mascot-hook-regression-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            foreach (var adapter in new[] { AgentAdapters.Codex, AgentAdapters.Claude })
+            {
+                var hookDir = Path.Combine(dir, adapter.Kind.ToString());
+                Directory.CreateDirectory(hookDir);
+                var monitor = new DesktopSessionMonitor(Path.Combine(dir, "missing-home"), hookDir, adapter);
+                var received = new List<CodexEvent>();
+                monitor.EventReceived += (_, e) => received.Add(e);
+                monitor.Poll();
+                var path = Path.Combine(hookDir, "approval.json");
+                File.WriteAllText(path, JsonSerializer.Serialize(new {
+                    session_id = "fixture", hook_event_name = adapter.Kind == AgentKind.Codex ? "PermissionRequest" : "Notification",
+                    tool_name = "Bash", timestamp = DateTimeOffset.UtcNow
+                }));
+                File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(1));
+                monitor.Poll();
+                Equal(1, received.Count, adapter.Kind + " hook received without transcript directory");
+                Equal(MascotState.NeedsAttention, new StatusAggregator().Apply(received.Single()).State, adapter.Kind + " hook raises attention");
+                monitor.Poll();
+                Equal(1, received.Count, adapter.Kind + " hook is not replayed on next poll");
+            }
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+    private static void TestProjectSelection()
+    {
+        var config = new MonitorConfiguration();
+        var root = Path.Combine(Path.GetTempPath(), "project-watch-test-" + Guid.NewGuid().ToString("N"));
+        var a = Path.Combine(root, "A"); var b = Path.Combine(root, "B");
+        Equal(true, ProjectWatchPolicy.Observe(config, a), "new project discovered");
+        Equal(true, ProjectWatchPolicy.Allows(config, a), "automatic monitoring defaults to enabled");
+        Equal(false, ProjectWatchPolicy.Observe(config, a.ToUpperInvariant() + Path.DirectorySeparatorChar), "same path and case variants deduplicate");
+        config.Projects.Single().Enabled = false;
+        Equal(false, ProjectWatchPolicy.Allows(config, a), "explicitly excluded project stays excluded with auto enabled");
+        config.AutoIncludeNewProjects = false;
+        ProjectWatchPolicy.Observe(config, b);
+        Equal(false, ProjectWatchPolicy.Allows(config, b), "newly discovered project excluded while auto is off");
+        config.Projects.Single(p => p.Path == b).Enabled = true;
+        Equal(true, ProjectWatchPolicy.Allows(config, b), "manually enabled project works while auto is off");
+        Equal(false, ProjectWatchPolicy.Allows(config, b + "-other"), "project selection never matches a sibling prefix");
+        Equal(false, ProjectWatchPolicy.Allows(config, Path.Combine(b, "nested")), "nested working directories are separately selectable projects");
+        config.AutoIncludeNewProjects = true;
+        Equal(false, ProjectWatchPolicy.Allows(config, a), "reenabling auto never undoes an explicit exclusion");
+        Equal(false, ProjectWatchPolicy.Allows(config, null), "unknown project events cannot bypass the project filter");
+        Equal(false, ProjectWatchPolicy.Observe(config, "relative-path"), "invalid relative project path is not saved");
+        Directory.CreateDirectory(Path.Combine(root, "sessions"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sessions", "test.jsonl"), JsonSerializer.Serialize(new { type = "session_meta", payload = new { id = "fixture", cwd = a, source = "vscode" } }) + "\n");
+            Equal(a, ProjectWatchPolicy.Discover(root, AgentAdapters.Codex, 100).Single(), "project picker discovers transcript headers without running an agent");
+            File.WriteAllText(Path.Combine(root, "session_index.jsonl"), JsonSerializer.Serialize(new { id = "fixture", thread_name = "Test chat title" }) + "\n");
+            var chat = ChatWatchPolicy.Discover(root, AgentAdapters.Codex, 100).Single();
+            Equal("Test chat title", chat.Title, "chat picker uses title index");
+            Equal("fixture", chat.Id, "chat picker keeps session ID");
+            var chats = new MonitorConfiguration { AutoIncludeNewChats = false };
+            ChatWatchPolicy.Observe(chats, AgentKind.Codex, "test", a);
+            Equal(false, ChatWatchPolicy.Allows(chats, AgentKind.Codex, "test", a), "new chat starts excluded");
+            chats.Chats.Single().Enabled = true;
+            Equal(true, ChatWatchPolicy.Allows(chats, AgentKind.Codex, "test", a), "individual chat can be enabled");
+            Equal(false, ChatWatchPolicy.Allows(chats, AgentKind.Claude, "test", a), "agent identity separates chats");
+            chats.Chats.Single().Enabled = false; chats.AutoIncludeNewChats = true;
+            Equal(false, ChatWatchPolicy.Allows(chats, AgentKind.Codex, "test", a), "explicit exclusion survives automatic monitoring enabled");
+            Equal(true, ChatWatchPolicy.Allows(chats, AgentKind.Codex, "sibling", a), "same-folder sibling remains monitored");
+        }
+        finally { Directory.Delete(root, true); }
+    }
+    private static void TestRecentLimit()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "mascot-limit-test-" + Guid.NewGuid().ToString("N"));
+        var sessions = Path.Combine(dir, "sessions"); Directory.CreateDirectory(sessions);
+        try
+        {
+            string Write(string id, int age)
+            {
+                var path = Path.Combine(sessions, id + ".jsonl");
+                File.WriteAllText(path, JsonSerializer.Serialize(new { type = "session_meta", payload = new { id, cwd = "C:/Fixture", source = "vscode" } }) + "\n" + Line("task_started", id) + "\n");
+                File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-age)); return path;
+            }
+            Write("older", 10); var active = Write("active", 1);
+            var monitor = new DesktopSessionMonitor(dir, Path.Combine(dir, "hooks"), recentSessionLimit: 1);
+            var events = new List<CodexEvent>(); MonitorHealth? health = null;
+            monitor.EventReceived += (_, e) => events.Add(e); monitor.HealthChanged += (_, e) => health = e;
+            monitor.Poll();
+            Equal(1, health!.Sessions, "recent cap limits initially read transcripts");
+            Equal(false, events.Any(e => e.ThreadId == "older"), "old transcripts are not replayed outside cap");
+            Write("newer", 0); Rescan(); monitor.Poll();
+            Equal(2, health.Sessions, "active transcript remains watched outside recent cap");
+            File.AppendAllText(active, Line("task_complete", "active") + "\n"); monitor.Poll();
+            Equal(true, events.Any(e => e.ThreadId == "active" && e.Kind == CodexEventKind.TurnCompleted && !e.IsReplay), "active task outside cap still reports live completion");
+            File.SetLastWriteTimeUtc(active, DateTime.UtcNow.AddMinutes(-5)); Rescan(); monitor.Poll();
+            Equal(1, health.Sessions, "finished old transcript is evicted from polling set");
+            var completionCount = events.Count(e => e.ThreadId == "active" && e.Kind == CodexEventKind.TurnCompleted && !e.IsReplay);
+            File.SetLastWriteTimeUtc(active, DateTime.UtcNow.AddSeconds(1)); Rescan(); monitor.Poll();
+            Equal(completionCount, events.Count(e => e.ThreadId == "active" && e.Kind == CodexEventKind.TurnCompleted && !e.IsReplay), "recent re-entry never replays an old completion as a new alert");
+            File.AppendAllText(active, Line("task_started", "resumed") + "\n" + Line("task_complete", "resumed") + "\n"); monitor.Poll();
+            Equal(completionCount + 1, events.Count(e => e.ThreadId == "active" && e.Kind == CodexEventKind.TurnCompleted && !e.IsReplay), "recent re-entry reads and reports new appended turns");
+            Equal(1, new DesktopSessionMonitor(dir, dir, recentSessionLimit: -1).RecentSessionLimit, "recent cap has safe lower bound");
+            Equal(1000, new DesktopSessionMonitor(dir, dir, recentSessionLimit: int.MaxValue).RecentSessionLimit, "recent cap has safe upper bound");
+            void Rescan() => typeof(DesktopSessionMonitor).GetField("_nextScan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.SetValue(monitor, DateTimeOffset.MinValue);
+        }
+        finally { Directory.Delete(dir, true); }
     }
     private static string Line(string type, string turn) => JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow,
         type = "event_msg", payload = new { type, turn_id = turn } });

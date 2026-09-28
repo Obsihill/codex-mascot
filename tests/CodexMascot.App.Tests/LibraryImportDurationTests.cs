@@ -156,6 +156,11 @@ internal static class LibraryImportDurationTests
             Pump(650); check(!dashboard.IsTesting, "image test stops automatically at the configured duration and resets its button");
             duration.CommitValue(7500);
             check(MascotPresentationGroup.CompletionVisibleMilliseconds(store, manager) == 7500, "foreground acknowledgment honors the longest selected image duration");
+            Mascot().Settings(MascotState.NeedsAttention).ImageDurationMs = 6200;
+            check(MascotPresentationGroup.NotificationVisibleMilliseconds(store, manager, MascotState.NeedsAttention) == 6200, "question notification uses its own image duration");
+            var questionTime = DateTimeOffset.UtcNow;
+            check(!MainWindow.ShouldDismissForForeground(MascotState.NeedsAttention, true, questionTime, questionTime.AddMilliseconds(6200)), "foreground Codex does not instantly dismiss question");
+            check(MainWindow.ShouldDismissForForeground(MascotState.NeedsAttention, true, questionTime.AddMilliseconds(6200), questionTime.AddMilliseconds(6200)), "foreground Codex dismisses question after visible duration");
             Capture(dashboard, "duration");
             var video = Environment.GetEnvironmentVariable("MASCOT_VIDEO_TEST_FILE");
             if (!string.IsNullOrWhiteSpace(video))

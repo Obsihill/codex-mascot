@@ -13,7 +13,7 @@ public sealed class CompletionPopupPolicy
     }
 
     public MascotState Resolve(MascotState state, bool keepUntilClick)
-        => keepUntilClick && _pending.Count > 0 && state is not (MascotState.NeedsAttention or MascotState.Failed)
+        => keepUntilClick && _pending.Count > 0 && state is not (MascotState.NeedsAttention or MascotState.Failed or MascotState.Interrupted)
             ? MascotState.Completed : state;
 
     public void Acknowledge(string? threadId = null)

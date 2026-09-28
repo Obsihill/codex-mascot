@@ -17,7 +17,14 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // Existing interaction fixtures assert Korean captions regardless of host language.
+        Loc.Configure("ko");
         if (args.FirstOrDefault() == "app-server") { FakeServer(); return; }
+        if (args.FirstOrDefault() == "--activate-instance-test")
+        {
+            Environment.ExitCode = InstanceActivation.NotifyAsync(args[1]).GetAwaiter().GetResult() ? 0 : 1;
+            return;
+        }
         if (args.FirstOrDefault() == "--window-chrome")
         {
             _ = new System.Windows.Application { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
@@ -35,12 +42,22 @@ internal static class Program
         Directory.CreateDirectory(dir);
         try
         {
+            // Branding tests now load WPF pack resources and create windows too.
+            _ = System.Windows.Application.Current ?? new System.Windows.Application { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
+            if (args.FirstOrDefault() == "--settings-validation")
+            {
+                LocalizationTests.Run(Check, dir); SettingsTransactionTests.Run(Check, dir);
+                Console.WriteLine($"PASS: {_count} settings/localization assertions."); return;
+            }
             BrandingTests.Run(Check);
+            InstanceActivationTests.Run(Check);
             DistributionLibraryTests.Run(Check, dir);
             RandomSoundTests.Run(Check, dir);
             PopupFeatureTests.Run(Check);
             LibraryFeatureTests.Run(Check, dir);
             SequenceTest.Run(Check, dir);
+            TaskbarOcclusionTests.Run(Check);
+            TaskbarOcclusionTests.Options(Check, dir);
             LibrarySettingsTests.Run(Check, dir);
             StudioInteractionTests.Run(Check, dir);
             CenterPlacementTests.Run(Check, dir);
@@ -50,6 +67,9 @@ internal static class Program
             LibraryImportDurationTests.Run(Check, dir);
             PencilThemeTests.Run(Check, dir);
             PencilWindowTests.Run(Check);
+            AppThemeTests.Run(Check, dir);
+            LocalizationTests.Run(Check, dir);
+            SettingsTransactionTests.Run(Check, dir);
             AudioGainTests.Run(Check);
             using var image = new Image<Bgra32>(16, 16, new Bgra32(255, 0, 0));
             image.Frames.RootFrame.Metadata.GetGifMetadata().FrameDelay = 12;

@@ -19,6 +19,9 @@ public sealed class DesktopSessionMonitor
         public SessionIdentity Identity => Context.Identity;
     }
     private readonly Dictionary<string, Tracked> _files = new(StringComparer.OrdinalIgnoreCase);
+    // Retain the read cursor without polling inactive files. When an older task
+    // becomes recent again, read only appended records, not its old completion.
+    private readonly Dictionary<string, Tracked> _retired = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _hooksSeen = new(StringComparer.OrdinalIgnoreCase);
     private readonly DateTimeOffset _started = DateTimeOffset.UtcNow;
     private DateTimeOffset _nextScan;
@@ -31,8 +34,9 @@ public sealed class DesktopSessionMonitor
     public string HookDirectory { get; }
     public IAgentAdapter Adapter { get; }
     public AgentKind Kind => Adapter.Kind;
-    public DesktopSessionMonitor(string codexHome, string hookDirectory, IAgentAdapter? adapter = null)
-    { CodexHome = codexHome; HookDirectory = hookDirectory; Adapter = adapter ?? AgentAdapters.Codex; }
+    public int RecentSessionLimit { get; }
+    public DesktopSessionMonitor(string codexHome, string hookDirectory, IAgentAdapter? adapter = null, int recentSessionLimit = 100)
+    { CodexHome = codexHome; HookDirectory = hookDirectory; Adapter = adapter ?? AgentAdapters.Codex; RecentSessionLimit = Math.Clamp(recentSessionLimit, 1, 1000); }
 
     public async Task RunAsync(CancellationToken ct)
     {
@@ -51,6 +55,8 @@ public sealed class DesktopSessionMonitor
         var sessionsRoot = Adapter.SessionsRoot(CodexHome);
         if (!Directory.Exists(sessionsRoot))
         {
+            // Hooks are an independent source, including before the first transcript exists.
+            ReadHooks();
             HealthChanged?.Invoke(this, new(0, _lastEvent, _hookCount, Adapter.MissingRootMessage));
             return;
         }
@@ -58,10 +64,19 @@ public sealed class DesktopSessionMonitor
         {
             var recent = new DirectoryInfo(sessionsRoot).EnumerateFiles("*.jsonl", new EnumerationOptions
                 { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint })
-                .OrderByDescending(f => f.LastWriteTimeUtc).Take(100).ToArray();
+                .OrderByDescending(f => f.LastWriteTimeUtc).Take(RecentSessionLimit).ToArray();
+            var recentPaths = recent.Select(f => f.FullName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in _files.Values.Where(e => e.ActiveTurn is null && !recentPaths.Contains(e.Path)).ToArray())
+            {
+                Emit(new(CodexEventKind.ThreadClosed, Adapter.TranscriptSource, entry.Identity.Id, Message: "최근 기록 감시 범위 밖") { ProjectPath = entry.Identity.Cwd, IsReplay = true });
+                _files.Remove(entry.Path);
+                _retired[entry.Path] = entry;
+            }
             foreach (var file in recent)
             {
                 if (_files.ContainsKey(file.FullName)) continue;
+                if (_retired.Remove(file.FullName, out var previous))
+                { _files[file.FullName] = previous; continue; }
                 try { Discover(file, !_initialized || file.LastWriteTimeUtc < _started.UtcDateTime); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             }
@@ -96,7 +111,7 @@ public sealed class DesktopSessionMonitor
         ReadHooks();
         HealthChanged?.Invoke(this, new(_files.Count, _lastEvent, _hookCount,
             _files.Count == 0 ? Adapter.DisplayName + ": 읽을 수 있는 로컬 작업 기록이 없습니다."
-                : Adapter.DisplayName + " 기록 감시 중 · 목록은 최근 100개 기록 기준"));
+                : Adapter.DisplayName + " 기록 감시 중 · 목록은 최근 " + RecentSessionLimit + "개 기록 기준"));
     }
 
     private void Discover(FileInfo file, bool replay)

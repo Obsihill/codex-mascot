@@ -21,40 +21,6 @@ public static class Pencil
     public static void SetIcon(DependencyObject element, PencilIconKind value) => element.SetValue(IconProperty, value);
 }
 
-public static class PencilPalette
-{
-    private static SolidColorBrush Brush(string color) { var brush = (SolidColorBrush)new BrushConverter().ConvertFromString(color)!; brush.Freeze(); return brush; }
-    public static SolidColorBrush Ink { get; } = Brush("#373A35");
-    public static SolidColorBrush Muted { get; } = Brush("#696A60");
-    public static SolidColorBrush Line { get; } = Brush("#88887A");
-    public static SolidColorBrush Emphasis { get; } = Brush("#252A22");
-    public static SolidColorBrush Surface { get; } = Brush("#FCFAF4");
-    public static SolidColorBrush Inset { get; } = Brush("#F0EEE5");
-    public static SolidColorBrush ValueFill { get; } = Brush("#D8D5CC");
-    public static SolidColorBrush Accent { get; } = Brush("#587461");
-    public static SolidColorBrush Selected { get; } = Brush("#E7ECDF");
-    public static SolidColorBrush Danger { get; } = Brush("#97605A");
-    public static SolidColorBrush Button { get; } = Brush("#626A58");
-    public static SolidColorBrush OnButton { get; } = Brush("#FFFEF8");
-    public static SolidColorBrush OrangeSurface { get; } = Brush("#F3D8B5");
-    public static SolidColorBrush OrangeInk { get; } = Brush("#82491F");
-    public static SolidColorBrush OrangeLine { get; } = Brush("#B76A31");
-    public static DrawingBrush Paper { get; } = CreatePaper();
-    private static DrawingBrush CreatePaper()
-    {
-        var drawing = new DrawingGroup();
-        using (var dc = drawing.Open())
-        {
-            dc.DrawRectangle(Brush("#F4F0E5"), null, new Rect(0, 0, 64, 64));
-            var grain = Brush("#12706448"); var random = new Random(711);
-            for (var i = 0; i < 85; i++) dc.DrawEllipse(grain, null, new Point(random.NextDouble() * 64, random.NextDouble() * 64), .28, .42);
-        }
-        drawing.Freeze();
-        var brush = new DrawingBrush(drawing) { TileMode = TileMode.Tile, ViewportUnits = BrushMappingMode.Absolute, Viewport = new Rect(0, 0, 64, 64), Stretch = Stretch.None };
-        brush.Freeze(); return brush;
-    }
-}
-
 // Retains Border's layout/hit testing; only its paint is replaced. Geometry is
 // deterministic and cached per size, so pointer hover never makes the line jitter.
 public sealed class PencilBorder : Border

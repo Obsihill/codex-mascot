@@ -15,6 +15,23 @@ public static class HookIntegration
     public static string DefaultHomeFor(AgentKind kind) => AgentAdapters.For(kind).DefaultHome;
     private const string Marker = "-MascotBridge";
 
+    internal static void EnsureInstalled(string home, AgentKind kind)
+    {
+        // Refresh a stale installation path, but do not rewrite a healthy config
+        // or generate a backup on every monitoring restart.
+        var path = Path.Combine(home, AgentAdapters.For(kind).HookConfigFileName);
+        var script = Path.Combine(AppContext.BaseDirectory, "integration", "Send-MascotEvent.ps1");
+        if (IsInstalled(home, kind))
+        {
+            var root = JsonNode.Parse(File.ReadAllText(path))!;
+            var owned = root["hooks"]!.AsObject().SelectMany(p => (p.Value as JsonArray ?? new()).OfType<JsonObject>())
+                .SelectMany(g => (g["hooks"] as JsonArray ?? new()).OfType<JsonObject>())
+                .Select(h => h["command"]?.GetValue<string>()).Where(c => c?.Contains(Marker, StringComparison.Ordinal) == true).ToArray();
+            if (owned.All(c => c!.Contains("\"" + script + "\"", StringComparison.OrdinalIgnoreCase))) return;
+        }
+        Install(home, kind);
+    }
+
     public static bool IsInstalled(string home, AgentKind kind)
     {
         var path = Path.Combine(home, AgentAdapters.For(kind).HookConfigFileName);
@@ -39,20 +56,20 @@ public static class HookIntegration
     public static string Install(string home, AgentKind kind)
     {
         var script = Path.Combine(AppContext.BaseDirectory, "integration", "Send-MascotEvent.ps1");
-        if (!File.Exists(script)) throw new FileNotFoundException("integration 폴더가 없습니다. ZIP 전체를 풀어 주세요.", script);
+        if (!File.Exists(script)) throw new FileNotFoundException(Loc.T("integration 폴더가 없습니다. ZIP 전체를 풀어 주세요."), script);
         Directory.CreateDirectory(home);
         var path = Path.Combine(home, AgentAdapters.For(kind).HookConfigFileName);
         var root = File.Exists(path) ? JsonNode.Parse(File.ReadAllText(path)) as JsonObject : new JsonObject();
-        if (root is null) throw new InvalidDataException("기존 설정 파일을 읽을 수 없습니다. 원본은 변경하지 않았습니다.");
+        if (root is null) throw new InvalidDataException(Loc.T("기존 설정 파일을 읽을 수 없습니다. 원본은 변경하지 않았습니다."));
         var hooks = root["hooks"] as JsonObject ?? new JsonObject();
-        if (root["hooks"] is not null && root["hooks"] is not JsonObject) throw new InvalidDataException("hooks 형식이 올바르지 않습니다.");
+        if (root["hooks"] is not null && root["hooks"] is not JsonObject) throw new InvalidDataException(Loc.T("hooks 형식이 올바르지 않습니다."));
         if (root["hooks"] is null) root["hooks"] = hooks;
         RemoveOwned(hooks);
         var events = EventDirectoryFor(kind);
         foreach (var name in EventNames(kind))
         {
             var groups = hooks[name] as JsonArray;
-            if (hooks[name] is not null && groups is null) throw new InvalidDataException(name + " 배열 형식을 확인하세요.");
+            if (hooks[name] is not null && groups is null) throw new InvalidDataException(name + Loc.T(" 배열 형식을 확인하세요."));
             if (groups is null) hooks[name] = groups = new JsonArray();
             var command = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -File \"" + script + "\" " + Marker +
                 " -EventDirectory \"" + events + "\"";
@@ -68,7 +85,7 @@ public static class HookIntegration
     {
         var path = Path.Combine(home, AgentAdapters.For(kind).HookConfigFileName);
         if (!File.Exists(path)) return;
-        var root = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? throw new InvalidDataException("설정 파일 형식 오류");
+        var root = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? throw new InvalidDataException(Loc.T("설정 파일 형식 오류"));
         if (root["hooks"] is JsonObject hooks) RemoveOwned(hooks);
         Save(path, root);
     }

@@ -7,6 +7,18 @@ internal static class StartupRegistration
     // Keep the existing registration identity so upgrades do not add a second entry.
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "CodexMascot";
+    internal static bool IsEnabledFor(string? command, string executable) =>
+        string.Equals(command, "\"" + executable + "\" --tray", StringComparison.OrdinalIgnoreCase);
+    internal static string? ReadCommand()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+        return key?.GetValue(ValueName) as string;
+    }
+    internal static void RestoreCommand(string? command)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RunKey);
+        if (command is null) key.DeleteValue(ValueName, false); else key.SetValue(ValueName, command);
+    }
 
     internal static void SetEnabled(bool enabled)
     {

@@ -3,88 +3,65 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:local="clr-namespace:CodexMascot.App"
  Title="{x:Static local:AppBrand.Name}" Width="1220" Height="900" MinWidth="1020" MinHeight="760"
- Background="{x:Static local:PencilPalette.Paper}" Foreground="{x:Static local:PencilPalette.Ink}" WindowStartupLocation="CenterScreen">
+ Background="{Binding Paper, Source={x:Static local:PencilPalette.Current}}" Foreground="{Binding Ink, Source={x:Static local:PencilPalette.Current}}" WindowStartupLocation="CenterScreen">
  <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="PencilTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
  <Grid x:Name="ShellRoot">
  <local:LibraryDashboard x:Name="Dashboard"/>
  <Grid x:Name="WorkspacePanel" Margin="0,0,10,0" MinHeight="600" TextElement.FontSize="16" Visibility="Collapsed">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <local:PencilBorder Grid.Row="1" Padding="14" Background="{x:Static local:PencilPalette.Surface}" CornerRadius="12" Margin="0,0,0,12">
-   <StackPanel><TextBlock x:Name="StatusTextBlock" Text="시작 중…" FontSize="21" FontWeight="SemiBold"/>
-    <TextBlock x:Name="ConnectionTextBlock" TextWrapping="Wrap" Foreground="{x:Static local:PencilPalette.Accent}" Margin="0,5,0,0"/>
+  <local:PencilBorder Grid.Row="1" Padding="14" Background="{Binding Surface, Source={x:Static local:PencilPalette.Current}}" CornerRadius="12" Margin="0,0,0,12">
+   <StackPanel><TextBlock x:Name="StatusTextBlock" Text="{local:Loc Key=LB3E37D48D233}" FontSize="21" FontWeight="SemiBold"/>
+    <TextBlock x:Name="ConnectionTextBlock" TextWrapping="Wrap" Foreground="{Binding Accent, Source={x:Static local:PencilPalette.Current}}" Margin="0,5,0,0"/>
    </StackPanel>
   </local:PencilBorder>
-  <TabControl Grid.Row="2" Background="{x:Static local:PencilPalette.Inset}" BorderBrush="{x:Static local:PencilPalette.Line}">
-   <TabItem Header="데스크톱 작업 감시">
+  <TabControl Grid.Row="2" Background="{Binding Inset, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding Line, Source={x:Static local:PencilPalette.Current}}">
+   <TabItem Header="{local:Loc Key=LB062E94204B7}">
     <Grid Margin="12">
      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
      <StackPanel>
-      <TextBlock Text="실행 중인 Codex / Claude Code를 그대로 사용하세요. 작업 기록은 읽기 전용으로 감시합니다." Foreground="{x:Static local:PencilPalette.Ink}" TextWrapping="Wrap"/>
-      <TextBlock Text="기록 방식은 각 도구의 버전에 따라 달라질 수 있습니다. 5분간 갱신이 없으면 '확인 필요'로 표시합니다." Foreground="{x:Static local:PencilPalette.Muted}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,8"/>
-      <DockPanel><TextBlock Text="Codex 폴더" Foreground="{x:Static local:PencilPalette.Ink}" Width="100" VerticalAlignment="Center"/><Button DockPanel.Dock="Right" Content="폴더 선택" local:Pencil.Icon="Folder" Click="BrowseHome_OnClick"/><TextBox x:Name="CodexHomeTextBox" ToolTip="Codex 데이터 폴더 (.codex). 비우면 감시 안 함."/></DockPanel>
-      <DockPanel><TextBlock Text="Claude 폴더" Foreground="{x:Static local:PencilPalette.Ink}" Width="100" VerticalAlignment="Center"/><Button DockPanel.Dock="Right" Content="폴더 선택" local:Pencil.Icon="Folder" Click="BrowseClaudeHome_OnClick"/><TextBox x:Name="ClaudeHomeTextBox" ToolTip="Claude Code 데이터 폴더 (.claude). 비우면 감시 안 함."/></DockPanel>
-      <DockPanel><TextBlock Text="감시할 프로젝트" Foreground="{x:Static local:PencilPalette.Ink}" Width="100" VerticalAlignment="Center"/><Button DockPanel.Dock="Right" Content="프로젝트 선택" Click="BrowseFilter_OnClick"/><Button DockPanel.Dock="Right" Content="모든 프로젝트" Click="ClearFilter_OnClick"/><TextBox x:Name="FilterTextBox" ToolTip="비워두면 모든 프로젝트. 프로젝트 폴더 경로로 필터링합니다."/></DockPanel>
+      <TextBlock Text="{local:Loc Key=L7FFB0C9FEA0D}" Foreground="{Binding Ink, Source={x:Static local:PencilPalette.Current}}" TextWrapping="Wrap"/>
+      <TextBlock Text="{local:Loc Key=LBA7E28575B3F}" Foreground="{Binding Muted, Source={x:Static local:PencilPalette.Current}}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,8"/>
+      <DockPanel><TextBlock Text="{local:Loc Key=LBD72EBD91938}" Foreground="{Binding Ink, Source={x:Static local:PencilPalette.Current}}" Width="100" VerticalAlignment="Center"/><Button DockPanel.Dock="Right" Content="{local:Loc Key=LAB437C2C5679}" local:Pencil.Icon="Folder" Click="BrowseHome_OnClick"/><TextBox x:Name="CodexHomeTextBox" ToolTip="{local:Loc Key=L22298BA1CA74}"/></DockPanel>
+      <DockPanel><TextBlock Text="{local:Loc Key=LC6AD5CAD8A4A}" Foreground="{Binding Ink, Source={x:Static local:PencilPalette.Current}}" Width="100" VerticalAlignment="Center"/><Button DockPanel.Dock="Right" Content="{local:Loc Key=LAB437C2C5679}" local:Pencil.Icon="Folder" Click="BrowseClaudeHome_OnClick"/><TextBox x:Name="ClaudeHomeTextBox" ToolTip="{local:Loc Key=LECC6F3D80AC4}"/></DockPanel>
      </StackPanel>
      <WrapPanel Grid.Row="1" Margin="0,5">
-      <Button x:Name="MonitorButton" Content="감시 시작 / 새로 고침" local:Pencil.Icon="Reset" Click="Monitor_OnClick" Background="{x:Static local:PencilPalette.Selected}"/>
-      <Button Content="감시 정지" local:Pencil.Icon="Stop" Click="PauseMonitor_OnClick"/>
-      <ToggleButton x:Name="HooksToggle" Click="HooksToggle_OnClick" Margin="4" Padding="12,6" ToolTip="선택한 도구의 추가 알림 연결을 켜거나 끕니다. 일부만 연결된 경우 켜면 모두 연결합니다.">
-       <ToggleButton.Style>
-        <Style TargetType="ToggleButton" BasedOn="{StaticResource PencilToggle}">
-         <Setter Property="Content" Value="추가 알림 (Hooks) · 꺼짐"/>
-         <Setter Property="Background" Value="{x:Static local:PencilPalette.Surface}"/>
-         <Setter Property="Foreground" Value="{x:Static local:PencilPalette.Ink}"/>
-         <Style.Triggers>
-          <Trigger Property="IsChecked" Value="True"><Setter Property="Content" Value="추가 알림 (Hooks) · 켜짐"/></Trigger>
-          <Trigger Property="IsChecked" Value="{x:Null}"><Setter Property="Content" Value="추가 알림 (Hooks) · 일부 켜짐"/></Trigger>
-         </Style.Triggers>
-        </Style>
-       </ToggleButton.Style>
-      </ToggleButton>
+      <Button x:Name="MonitorButton" Content="{local:Loc Key=L73098D68A159}" local:Pencil.Icon="Reset" Click="Monitor_OnClick" Background="{Binding Selected, Source={x:Static local:PencilPalette.Current}}"/>
+      <Button Content="{local:Loc Key=L07DAADEF9DEB}" local:Pencil.Icon="Stop" Click="PauseMonitor_OnClick"/>
      </WrapPanel>
-     <TextBlock Grid.Row="2" x:Name="HookTextBlock" Text="기록 감시만으로 시작·응답 종료·중단을 표시합니다. 승인/질문 알림은 Hook 설정과 각 도구의 신뢰 검토가 필요합니다." Foreground="{x:Static local:PencilPalette.Muted}" TextWrapping="Wrap" Margin="0,0,0,10"/>
-     <ListView Grid.Row="3" x:Name="JobsListView" Background="{x:Static local:PencilPalette.Surface}" Foreground="{x:Static local:PencilPalette.Ink}" BorderBrush="{x:Static local:PencilPalette.Line}">
-      <ListView.View><GridView>
-       <GridViewColumn Header="상태" DisplayMemberBinding="{Binding State}" Width="110"/>
-       <GridViewColumn Header="프로젝트 · 작업" Width="205"><GridViewColumn.CellTemplate><DataTemplate>
+     <TextBlock Grid.Row="2" x:Name="HookTextBlock" Text="{local:Loc Key=LA7C945902AC5}" Foreground="{Binding Muted, Source={x:Static local:PencilPalette.Current}}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+     <ListView Grid.Row="3" x:Name="JobsListView" Focusable="False" IsTabStop="False" Background="{Binding Surface, Source={x:Static local:PencilPalette.Current}}" Foreground="{Binding Ink, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding Line, Source={x:Static local:PencilPalette.Current}}">
+      <ListView.ItemContainerStyle>
+       <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+        <Setter Property="Focusable" Value="False"/><Setter Property="IsHitTestVisible" Value="False"/>
+       </Style>
+      </ListView.ItemContainerStyle>
+      <ListView.Resources>
+       <Style TargetType="GridViewColumnHeader">
+        <Setter Property="Background" Value="{Binding Inset, Source={x:Static local:PencilPalette.Current}}"/>
+        <Setter Property="Foreground" Value="{Binding Ink, Source={x:Static local:PencilPalette.Current}}"/>
+        <Setter Property="BorderBrush" Value="{Binding Line, Source={x:Static local:PencilPalette.Current}}"/>
+        <Setter Property="Padding" Value="6,4"/><Setter Property="Focusable" Value="False"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="GridViewColumnHeader">
+         <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0,0,1,1" Padding="{TemplateBinding Padding}">
+          <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+         </Border>
+        </ControlTemplate></Setter.Value></Setter>
+       </Style>
+      </ListView.Resources>
+      <ListView.View><GridView AllowsColumnReorder="False">
+       <GridViewColumn Header="{local:Loc Key=LE10195A1239F}" DisplayMemberBinding="{Binding State}" Width="110"/>
+       <GridViewColumn Header="{local:Loc Key=L1F46C3B8F2E2}" Width="205"><GridViewColumn.CellTemplate><DataTemplate>
         <TextBlock Text="{Binding Project}" ToolTip="{Binding FullPath}" TextTrimming="CharacterEllipsis"/>
        </DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
-       <GridViewColumn Header="최근 수신" DisplayMemberBinding="{Binding Updated}" Width="90"/>
-       <GridViewColumn Header="수신 방식" DisplayMemberBinding="{Binding Source}" Width="85"/>
-       <GridViewColumn Header="설명" DisplayMemberBinding="{Binding Message}" Width="290"/>
+       <GridViewColumn Header="{local:Loc Key=L56BA41779428}" DisplayMemberBinding="{Binding Updated}" Width="90"/>
+       <GridViewColumn Header="{local:Loc Key=L049D3529FC35}" DisplayMemberBinding="{Binding Source}" Width="85"/>
+       <GridViewColumn Header="{local:Loc Key=L8C3F651D3083}" DisplayMemberBinding="{Binding Message}" Width="290"/>
       </GridView></ListView.View>
      </ListView>
-     <WrapPanel Grid.Row="4" Margin="0,8,0,0">
-      <Button Content="선택 결과 확인" Click="Acknowledge_OnClick"/>
-      <Button Content="모든 결과 확인" Click="AcknowledgeAll_OnClick"/>
-      <Button Content="작업 ID 복사" Click="CopyId_OnClick"/>
-      <Button Content="수신 진단 열기" Click="Diagnostics_OnClick"/>
-     </WrapPanel>
     </Grid>
    </TabItem>
-   <TabItem Header="앱에서 새 작업 실행">
-    <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="16">
-     <TextBlock Text="여기서 시작한 작업만 앱에서 중단할 수 있습니다." TextWrapping="Wrap" Foreground="{x:Static local:PencilPalette.Ink}"/>
-     <TextBlock Text="이미 데스크톱에서 진행 중인 작업은 첫 번째 탭에서 감시하세요." Foreground="{x:Static local:PencilPalette.Muted}" Margin="0,5,0,12"/>
-     <TextBlock Text="프로젝트 폴더" Foreground="{x:Static local:PencilPalette.Ink}"/>
-     <DockPanel><Button DockPanel.Dock="Right" Content="찾아보기" Click="BrowseProject_OnClick"/><ComboBox x:Name="ProjectPathComboBox" IsEditable="True" Margin="4" Padding="6"/></DockPanel>
-     <TextBlock Text="프롬프트" Foreground="{x:Static local:PencilPalette.Ink}"/><TextBox x:Name="PromptTextBox" AcceptsReturn="True" TextWrapping="Wrap" Height="110" VerticalScrollBarVisibility="Auto"/>
-     <WrapPanel><TextBlock Text="모델 (빈 값: Codex 기본값)" Foreground="{x:Static local:PencilPalette.Ink}" VerticalAlignment="Center"/><TextBox x:Name="ModelTextBox" Width="180"/>
-      <ComboBox x:Name="BackendComboBox" SelectedIndex="0" Width="140" Margin="4"><ComboBoxItem Content="app-server"/><ComboBoxItem Content="CLI JSON"/></ComboBox>
-      <ComboBox x:Name="ApprovalComboBox" SelectedIndex="0" Width="180" Margin="4"><ComboBoxItem Content="필요 시 승인 요청"/><ComboBoxItem Content="읽기 전용"/></ComboBox>
-     </WrapPanel>
-     <WrapPanel><Button x:Name="StartButton" Content="새 작업 시작" Click="Start_OnClick" Background="{x:Static local:PencilPalette.Selected}"/><Button x:Name="StopButton" Content="이 앱의 작업 중단" Click="Stop_OnClick" IsEnabled="False"/></WrapPanel>
-     <TextBlock x:Name="LauncherTextBlock" TextWrapping="Wrap" Foreground="{x:Static local:PencilPalette.Muted}" Margin="4"/>
-     <TextBlock Text="승인 요청 (이 앱이 시작한 작업)" Foreground="{x:Static local:PencilPalette.Ink}" Margin="4,12,4,4"/>
-     <ListBox x:Name="ApprovalsListBox" DisplayMemberPath="Label" Height="80" Margin="4"/>
-     <WrapPanel><Button Content="선택 요청 승인" Click="Approve_OnClick"/><Button Content="선택 요청 거절" Click="Decline_OnClick"/></WrapPanel>
-     <TextBlock Text="CLI JSON 모드는 승인 대화 없이 선택한 샌드박스 안에서만 실행합니다. 승인 대화가 필요하면 app-server를 선택하세요." Foreground="{x:Static local:PencilPalette.Muted}" TextWrapping="Wrap" Margin="4,10,4,0"/>
-     <TextBlock Text="Codex 실행 파일" Foreground="{x:Static local:PencilPalette.Ink}" Margin="4,10,4,0"/>
-     <DockPanel><Button DockPanel.Dock="Right" Content="EXE 선택" Click="BrowseCodex_OnClick"/><TextBox x:Name="CodexExeTextBox" ToolTip="비워두면 Codex 설치 경로를 자동 탐색합니다."/></DockPanel>
-    </StackPanel></ScrollViewer>
-   </TabItem>
   </TabControl>
-  <TextBlock Grid.Row="3" x:Name="LogTextBlock" Foreground="{x:Static local:PencilPalette.Muted}" TextWrapping="Wrap" Margin="4,10,4,0"/>
+  <TextBlock Grid.Row="3" x:Name="LogTextBlock" Foreground="{Binding Muted, Source={x:Static local:PencilPalette.Current}}" TextWrapping="Wrap" Margin="4,10,4,0"/>
  </Grid>
  </Grid>
 </Window>

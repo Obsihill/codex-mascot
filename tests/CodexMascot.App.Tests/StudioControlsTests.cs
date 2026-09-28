@@ -198,18 +198,18 @@ internal static class StudioControlsTests
         var manager = new CustomizationManager();
         var originalTopmost = manager.Configuration.Global.AlwaysOnTop;
         var window = new SettingsWindow(manager) { ShowActivated = false, ShowInTaskbar = false };
-        check(window.Title == "Agent Mascot · 앱 설정", "unified settings title uses Agent Mascot");
+        check(window.Title == "설정", "unified settings title is settings");
         try
         {
             window.Show(); window.UpdateLayout();
-            check(window.Pages.Items.Cast<TabItem>().Select(t => (string)t.Header).SequenceEqual(new[] { "일반", "알림", "정보" }), "standalone settings excludes legacy asset/theme tab");
+            check(window.Pages.Items.Cast<TabItem>().Select(t => (string)t.Header).SequenceEqual(new[] { "일반", "알림", "정보", "언어 / Language" }), "standalone settings includes language and excludes legacy asset/theme tab");
             var seen = new List<DependencyObject>();
             var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
             foreach (TabItem tab in window.Pages.Items)
             {
                 window.Pages.SelectedItem = tab; window.UpdateLayout();
                 seen.AddRange(Descendants(window));
-                if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(window, Path.ChangeExtension(screenshot, ".settings-" + tab.Header + ".png"));
+                if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(window, Path.ChangeExtension(screenshot, ".settings-" + tab.Header.ToString()!.Replace('/', '-') + ".png"));
             }
             var all = seen.Distinct().ToArray();
             var buttons = all.OfType<Button>().Select(b => b.Content?.ToString() ?? "").ToArray();
@@ -221,16 +221,21 @@ internal static class StudioControlsTests
             window.Pages.SelectedIndex = 0; window.UpdateLayout();
             if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(window, Path.ChangeExtension(screenshot, ".settings.png"));
             var saves = 0;
+            var previews = 0;
+            var originalFile = File.ReadAllText(AppPaths.ConfigFile);
             window.Saved += (_, _) => saves++;
+            window.PreviewChanged += (_, _) => previews++;
             var topmost = all.OfType<ComboBox>().Single(c => c.Tag?.ToString() == "항상 위");
             topmost.SelectedIndex = originalTopmost ? 1 : 0;
-            check(manager.Configuration.Global.AlwaysOnTop != originalTopmost && new CustomizationManager().Configuration.Global.AlwaysOnTop != originalTopmost && saves == 1, "settings dropdown saves immediately and notifies the app once");
+            check(manager.Configuration.Global.AlwaysOnTop != originalTopmost && File.ReadAllText(AppPaths.ConfigFile) == originalFile && saves == 0 && previews == 1, "settings dropdown previews without persisting before OK");
             window.Width = window.MinWidth; window.Height = window.MinHeight;
             window.Pages.SelectedIndex = 1; window.UpdateLayout();
-            var close = Descendants(window).OfType<Button>().Single(b => b.Content?.ToString() == "닫기");
+            var close = Descendants(window).OfType<Button>().Single(b => b.Name == "CancelSettings");
             var bottom = close.TranslatePoint(new Point(0, close.ActualHeight), window);
             check(close.IsVisible && bottom.Y <= window.ActualHeight, "settings footer remains visible at minimum window size");
             if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(window, Path.ChangeExtension(screenshot, ".settings-compact.png"));
+            close.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            check(manager.Configuration.Global.AlwaysOnTop == originalTopmost && File.ReadAllText(AppPaths.ConfigFile) == originalFile && !manager.IsEditing, "Cancel discards the preview and leaves disk unchanged");
         }
         finally { window.Close(); manager.Configuration.Global.AlwaysOnTop = originalTopmost; manager.Save(); }
     }

@@ -10,6 +10,7 @@ public sealed class TranscriptContext
     public string? CurrentTurn { get; set; }
     // Claude writes one assistant response as several records that all repeat its stop reason.
     public string? LastRequest { get; set; }
+    internal Dictionary<string, bool> QuestionCalls { get; } = new(StringComparer.Ordinal);
 }
 
 // One agent's on-disk conventions. Nothing here writes to the agent or controls it.
@@ -53,7 +54,7 @@ public sealed class CodexAgentAdapter : IAgentAdapter
     public SessionIdentity? ReadIdentity(IReadOnlyList<string> head)
         => head.Count == 0 ? null : DesktopEventParser.ReadIdentity(head[0]);
     public CodexEvent? ParseTranscript(string line, TranscriptContext context, bool replay)
-        => DesktopEventParser.ParseTranscript(line, context.Identity, replay);
+        => DesktopEventParser.ParseTranscript(line, context, replay);
     public CodexEvent? ParseHook(string json, bool replay) => DesktopEventParser.ParseHook(json, replay);
 }
 
