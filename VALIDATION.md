@@ -1,5 +1,13 @@
 # 검증 기록
 
+## 0.2.4 릴리스 — 2026-09-27
+
+- PR #3을 main에 병합함(커밋 `365c492`). Agent Mascot 브랜드, 마스코트별 크기·위치, 상태별 알림 유지·사운드 풀, 스튜디오 및 설정 UI 개선을 포함함.
+- Windows x64 Release 빌드 경고 0·오류 0.
+- Core 88개 + App 883개 = 971개 assertion 통과. GitHub Actions의 `test-and-publish`도 성공.
+- `dotnet publish -c Release -r win-x64 --self-contained true`로 `AgentMascot-0.2.4-Windows-x64.zip` 배포본 생성. 실행 파일 `AgentMascot.exe`, 파일 버전 0.2.4.0, 제품명 Agent Mascot 확인.
+- 기본 MasCat 이미지·사운드는 포함하며 개인 설정과 라이브러리는 배포본에서 제외함.
+
 ## 0.2.3 릴리스 — 2026-09-27
 
 - PR #2(Mascot Studio·폴더 라이브러리·영상·다중 마스코트 재생)를 main에 병합하고 버전을 0.2.1 → 0.2.3으로 올림.
