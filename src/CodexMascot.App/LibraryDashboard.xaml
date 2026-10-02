@@ -270,7 +270,7 @@
             <TextBlock x:Name="Feedback" FontFamily="{x:Static local:PencilFonts.Numbers}" FontSize="12" VerticalAlignment="Center" TextAlignment="Right" Margin="170,0,20,0" Foreground="{Binding Muted, Source={x:Static local:PencilPalette.Current}}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
             <StackPanel x:Name="FooterActions" Grid.Column="1" Orientation="Horizontal">
                 <Button x:Name="RegisterButton" Content="{local:Loc Key=LB6230F958A83}" local:Pencil.Icon="Add" Click="Register_OnClick" Background="{Binding Button, Source={x:Static local:PencilPalette.Current}}" Foreground="{Binding OnButton, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding Button, Source={x:Static local:PencilPalette.Current}}"/>
-                <Button x:Name="ProjectSelectionButton" Content="{Binding [프로젝트 선택], Source={x:Static local:Loc.Current}}" local:Pencil.Icon="Folder" Click="Projects_OnClick" Margin="10,0,0,0"/>
+                <Button x:Name="ProjectSelectionButton" Content="{Binding [감시 프로젝트 선택], Source={x:Static local:Loc.Current}}" local:Pencil.Icon="Folder" Click="Projects_OnClick" Margin="10,0,0,0"/>
                 <Button x:Name="AppSettingsButton" Content="{local:Loc Key=L115BCED49291}" local:Pencil.Icon="Settings" Click="Settings_OnClick" Margin="10,0,0,0"/>
             </StackPanel>
         </Grid>

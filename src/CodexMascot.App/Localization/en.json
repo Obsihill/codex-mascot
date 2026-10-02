@@ -4,6 +4,10 @@
   "프로젝트 폴더 추가": "Add project folder",
   "모두 감시": "Monitor all",
   "모두 제외": "Exclude all",
+  "표시된 프로젝트와 채팅을 모두 감시합니다.": "Monitor all projects and chats shown here.",
+  "표시된 프로젝트와 채팅을 모두 감시에서 제외합니다.": "Exclude all projects and chats shown here from monitoring.",
+  "표시된 항목 전부 켜기": "turn on all shown items",
+  "표시된 항목 전부 끄기": "turn off all shown items",
   "프로젝트 목록을 읽지 못했습니다: ": "Could not read projects: ",
   "발견된 프로젝트가 없습니다. 폴더를 직접 추가할 수 있습니다.": "No projects found. You can add a folder manually.",
   "프로젝트 {0}개": "{0} projects",
@@ -295,6 +299,7 @@
   "폴더 선택": "Choose folder",
   "프로젝트 · 작업": "Project · Task",
   "프로젝트 선택": "Select projects",
+  "감시 프로젝트 선택": "Select monitored projects",
   "프로젝트 폴더": "Project folder",
   "프로젝트 폴더와 프롬프트를 입력하세요.": "Enter a project folder and a prompt.",
   "프롬프트": "Prompt",
@@ -341,5 +346,6 @@
   "폴더를 펼쳐 채팅별 감시를 선택하세요. 새 채팅 자동 감시를 끄면 직접 체크한 채팅만 감시합니다.": "Expand a folder to select chats to monitor. Turn off automatic monitoring to monitor only chats you select.",
   "제목 없는 채팅": "Untitled chat",
   "폴더 전체 감시": "Monitor entire folder",
-  "프로젝트 {0}개 · 채팅 {1}개": "{0} projects · {1} chats"
+  "프로젝트 {0}개 · 채팅 {1}개": "{0} projects · {1} chats",
+  "현재 감시 범위에 채팅 기록이 없습니다.": "No chat records are in the current monitoring range."
 }

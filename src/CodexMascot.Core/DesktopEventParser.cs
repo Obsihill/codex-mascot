@@ -131,7 +131,8 @@ public static class DesktopEventParser
             };
             if (kind == CodexEventKind.Unknown) return null;
             var time = DateTimeOffset.TryParse(p.GetStringOrNull("timestamp"), out var t) ? t : DateTimeOffset.UtcNow;
-            return new(kind, "Hook", id, p.GetStringOrNull("turn_id"),
+            var turn = p.GetStringOrNull("turn_id");
+            return new(kind, "Hook", id, string.IsNullOrWhiteSpace(turn) ? null : turn,
                 Status: name == "Interrupt" ? "interrupted" : name == "Stop" ? "completed" : null,
                 Message: name == "PermissionRequest" ? "Codex에서 승인해 주세요: " + tool : name == "Stop" ? "응답 종료 신호 수신" : name,
                 RequestId: "hook:" + tool, OccurredAt: time) { ProjectPath = p.GetStringOrNull("cwd"), IsReplay = replay };

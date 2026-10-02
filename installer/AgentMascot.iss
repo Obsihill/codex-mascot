@@ -45,6 +45,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
 [CustomMessages]
+english.RemovalDataWarning=Uninstall also permanently deletes settings, logs and registered mascot copies stored inside the installation folder. Original files outside that folder are not deleted. Continue?
+korean.RemovalDataWarning=제거하면 설치 폴더 안의 설정, 로그, 등록한 마스코트 복사본도 영구 삭제됩니다. 설치 폴더 밖의 원본 파일은 삭제하지 않습니다. 계속할까요?
 english.DesktopShortcut=Create a desktop shortcut
 korean.DesktopShortcut=바탕 화면에 바로 가기 만들기
 english.Shortcuts=Additional shortcuts:
@@ -95,6 +97,84 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 var
   ExistingInstallDir: string;
   ForceClose: Boolean;
+  CleanupRoot: string;
+
+function IsSafeCleanupRoot(const Root: string): Boolean;
+var
+  Current, Parent: string;
+  Info: TFindRec;
+begin
+  Result := False;
+  if (Root = '') or (Length(Root) <= 3) then Exit;
+  if (CompareText(Root, ExpandConstant('{win}')) = 0) or
+     (CompareText(Root, ExpandConstant('{sys}')) = 0) or
+     (CompareText(Root, RemoveBackslashUnlessRoot(GetEnv('USERPROFILE'))) = 0) or
+     (CompareText(Root, RemoveBackslashUnlessRoot(GetEnv('LOCALAPPDATA'))) = 0) or
+     (CompareText(Root, RemoveBackslashUnlessRoot(GetEnv('APPDATA'))) = 0) or
+     (CompareText(Root, ExpandConstant('{autopf}')) = 0) or
+     (CompareText(Root, AddBackslash(GetEnv('LOCALAPPDATA')) + 'Programs') = 0) then Exit;
+  // Never traverse a junction/symlink in the installation path.
+  Current := Root;
+  while Length(Current) > 3 do
+  begin
+    if not FindFirst(Current, Info) then Exit;
+    try
+      if (Info.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0 then Exit;
+    finally
+      FindClose(Info);
+    end;
+    Parent := RemoveBackslashUnlessRoot(ExtractFileDir(Current));
+    if Parent = Current then Exit;
+    Current := Parent;
+  end;
+  Result := True;
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  CleanupRoot := RemoveBackslashUnlessRoot(ExpandFileName(ExpandConstant('{app}')));
+  if not IsSafeCleanupRoot(CleanupRoot) then
+  begin
+    Log('Skipping additional data cleanup: unsafe installation path.');
+    CleanupRoot := '';
+  end;
+  Result := True;
+  if (CleanupRoot <> '') and not UninstallSilent then
+    Result := MsgBox(CustomMessage('RemovalDataWarning'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
+end;
+
+procedure RemoveOwnedData(const Name: string);
+var
+  Target: string;
+begin
+  if (CleanupRoot = '') or not IsSafeCleanupRoot(CleanupRoot) then Exit;
+  // Only literal app-owned child directories are passed here. Never delete
+  // {app} recursively, external media paths, or shared fallback AppData.
+  Target := AddBackslash(CleanupRoot) + Name;
+  if DirExists(Target) and not DelTree(Target, True, True, True) then
+    Log('Could not fully remove application data: ' + Target);
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  // Clear generated data before Inno removes tracked files and directories,
+  // so its normal final cleanup can also remove the application directory.
+  if CurUninstallStep = usUninstall then
+  begin
+    RemoveOwnedData('config');
+    RemoveOwnedData('library');
+    RemoveOwnedData('logs');
+    RemoveOwnedData('work');
+    RemoveOwnedData('assets');
+  end;
+  if CurUninstallStep = usPostUninstall then
+  begin
+    // Unknown user files are preserved; remove the installation folder only
+    // when empty. Inno also removes its own remaining uninstaller files.
+    if (CleanupRoot <> '') and IsSafeCleanupRoot(CleanupRoot) then
+      RemoveDir(CleanupRoot);
+  end;
+end;
 
 function InitializeSetup(): Boolean;
 begin

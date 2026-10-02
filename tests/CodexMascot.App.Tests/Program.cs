@@ -44,6 +44,11 @@ internal static class Program
         {
             // Branding tests now load WPF pack resources and create windows too.
             _ = System.Windows.Application.Current ?? new System.Windows.Application { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
+            if (args.FirstOrDefault() == "--notification-validation")
+            {
+                NotificationDeliveryAppTests.Run(Check);
+                Console.WriteLine($"PASS: {_count} notification delivery assertions."); return;
+            }
             if (args.FirstOrDefault() == "--settings-validation")
             {
                 LocalizationTests.Run(Check, dir); SettingsTransactionTests.Run(Check, dir);
@@ -54,6 +59,7 @@ internal static class Program
             DistributionLibraryTests.Run(Check, dir);
             RandomSoundTests.Run(Check, dir);
             PopupFeatureTests.Run(Check);
+            NotificationDeliveryAppTests.Run(Check);
             LibraryFeatureTests.Run(Check, dir);
             SequenceTest.Run(Check, dir);
             TaskbarOcclusionTests.Run(Check);
@@ -185,7 +191,9 @@ internal static class Program
                 Check(recovered.LoadWarning is not null && File.Exists(AppPaths.ConfigFile), "corrupt JSON recovery");
             }
             finally { File.WriteAllText(AppPaths.ConfigFile, original); }
-            TestTransport(dir).GetAwaiter().GetResult();
+            // WPF fixtures may leave a DispatcherSynchronizationContext here.
+            // Run the headless transport fixture off the blocked UI thread.
+            Task.Run(() => TestTransport(dir)).GetAwaiter().GetResult();
             Console.WriteLine("PASS: " + _count + " app assertions (library packages/drag, event sound, coordinates, popup lifetimes/clicks, desktop activation, media, themes, hooks, RPC).");
         }
         finally { Directory.Delete(dir, true); }

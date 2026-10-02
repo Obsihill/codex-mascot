@@ -56,6 +56,7 @@ internal static class Program
         TestRecentLimit();
         TestProjectSelection();
         TestNotificationRegressions();
+        NotificationDeliveryTests.Run((condition, message) => Equal(true, condition, message));
         TestTranscriptQuestions();
         var a = new StatusAggregator();
         Equal(MascotState.Running, a.Apply(E(CodexEventKind.TurnStarted)).State, "start");

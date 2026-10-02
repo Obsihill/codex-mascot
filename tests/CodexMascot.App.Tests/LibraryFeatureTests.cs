@@ -280,10 +280,17 @@ internal static class LibraryFeatureTests
             Application.Current.Windows.OfType<SettingsWindow>().Single().Close();
             var projectsButton = (Button)main.Dashboard.FindName("ProjectSelectionButton");
             var footer = (StackPanel)main.Dashboard.FindName("FooterActions");
-            check(projectsButton.Content?.ToString() == "프로젝트 선택" && footer.Children.IndexOf(projectsButton) < footer.Children.IndexOf((UIElement)main.Dashboard.FindName("AppSettingsButton")), "project selector is left of settings in the studio footer");
+            check(projectsButton.Content?.ToString() == "감시 프로젝트 선택" && footer.Children.IndexOf(projectsButton) < footer.Children.IndexOf((UIElement)main.Dashboard.FindName("AppSettingsButton")), "monitored-project selector is left of settings in the studio footer");
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.TurnStarted, "Codex Hook", "excluded-test-chat", "current") { ProjectPath = allowedProject, IsReplay = true });
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.TurnStarted, "Codex Hook", "blocked", "current") { ProjectPath = blockedProject, IsReplay = true });
             projectsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump();
             check(Application.Current.Windows.OfType<ProjectSelectionWindow>().Count() == 1, "project button opens the project selection window");
-            Application.Current.Windows.OfType<ProjectSelectionWindow>().Single().Close();
+            var picker = Application.Current.Windows.OfType<ProjectSelectionWindow>().Single();
+            for (var attempt = 0; attempt < 30 && picker.ProjectChoices.Count == 0; attempt++)
+            { System.Threading.Thread.Sleep(10); Pump(); }
+            check(picker.ProjectChoices.ContainsKey(allowedProject) && picker.ProjectChoices.ContainsKey(blockedProject) &&
+                  !picker.ProjectChoices.ContainsKey(futureProject), "picker shows actively monitored chats outside the recent file scan, including excluded chats, but hides saved inactive history");
+            picker.Close();
         }
         finally { main.ExitApplication(); manager.Configuration.Monitor.AutoStart = autoStart; manager.Configuration.Monitor.CodexHome = oldCodexHome; manager.Configuration.Monitor.ClaudeHome = oldClaudeHome; manager.Save(); }
     }

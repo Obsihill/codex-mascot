@@ -58,14 +58,75 @@ internal static class SettingsTransactionTests
             check(StartupRegistration.IsEnabledFor("\"C:\\Apps\\AgentMascot.exe\" --tray", "C:\\Apps\\AgentMascot.exe"), "installer startup command matches the app preference");
             check(!StartupRegistration.IsEnabledFor(null, "C:\\Apps\\AgentMascot.exe") && !StartupRegistration.IsEnabledFor("\"C:\\Other\\AgentMascot.exe\" --tray", "C:\\Apps\\AgentMascot.exe"), "disabled or another installation is not reported as enabled");
             var beforeProjects = File.ReadAllText(AppPaths.ConfigFile);
+            check(new CodexMascot.Core.MonitorConfiguration().RecentSessionLimit == 100,
+                "new installations default to 100 recent records per agent");
+            var beforeAutoInclude = monitor.AutoIncludeNewChats;
+            var beforeRecentLimit = monitor.RecentSessionLimit;
             var project = Path.Combine(dir, "sample-project");
             var excluded = Path.Combine(dir, "excluded-project");
             var selector = new ProjectSelectionWindow(manager) { ShowActivated = false, ShowInTaskbar = false };
             try
             {
                 selector.Show(); selector.AddProject(project, true); selector.AutoInclude.IsChecked = false;
+                var pickerRoot = (DockPanel)selector.Content;
+                var pickerFooter = (DockPanel)pickerRoot.Children[0];
+                var pickerButtons = (StackPanel)pickerFooter.Children[0];
+                var pickerOptions = (StackPanel)pickerRoot.Children[1];
+                var pickerSummary = (Grid)pickerOptions.Children[^1];
+                var pickerActions = (StackPanel)pickerSummary.Children[1];
+                check(selector.Title == "감시 프로젝트 선택" && ReferenceEquals(pickerFooter.Children[1], selector.AutoInclude) &&
+                      selector.AutoInclude.HorizontalAlignment == HorizontalAlignment.Left &&
+                      DockPanel.GetDock(pickerButtons) == Dock.Right && pickerButtons.Children.IndexOf(selector.Confirm) == 0,
+                    "picker title and bottom-left auto-monitor checkbox sit beside right-aligned confirmation buttons");
+                check(ReferenceEquals(pickerSummary.Children[0], pickerSummary.Children.OfType<TextBlock>().Single()) &&
+                      Grid.GetColumn(pickerActions) == 1 && pickerActions.HorizontalAlignment == HorizontalAlignment.Right &&
+                      ReferenceEquals(pickerActions.Children[0], selector.MonitorAll) && ReferenceEquals(pickerActions.Children[1], selector.ExcludeAll) &&
+                      Pencil.GetIcon(selector.MonitorAll) == PencilIconKind.MonitorAll && Pencil.GetIcon(selector.ExcludeAll) == PencilIconKind.ExcludeAll &&
+                      selector.MonitorAll.Content?.ToString() == "" && selector.ExcludeAll.Content?.ToString() == "" &&
+                      selector.MonitorAll.ToolTip is ToolTip { Content: "모두 감시 · 표시된 항목 전부 켜기" } &&
+                      selector.ExcludeAll.ToolTip is ToolTip { Content: "모두 제외 · 표시된 항목 전부 끄기" } &&
+                      ToolTipService.GetInitialShowDelay(selector.MonitorAll) == 200 &&
+                      ToolTipService.GetInitialShowDelay(selector.ExcludeAll) == 200,
+                    "icon-only all and exclude controls sit at the far right and explain their actions on hover");
+                foreach (var darkTheme in new[] { true, false })
+                {
+                    AppTheme.Apply(darkTheme);
+                    foreach (var button in new[] { selector.MonitorAll, selector.ExcludeAll })
+                    {
+                        var tip = (ToolTip)button.ToolTip;
+                        tip.ApplyTemplate(); tip.Measure(new Size(500, 100)); tip.Arrange(new Rect(tip.DesiredSize));
+                        check(ReferenceEquals(tip.Background, PencilPalette.Surface) && ReferenceEquals(tip.Foreground, PencilPalette.Ink) &&
+                              tip.FontSize == 12 && tip.DesiredSize.Width < 280 && tip.DesiredSize.Height < 40 &&
+                              tip.Template.FindName("TipBorder", tip) is PencilBorder,
+                            "compact icon tooltip has legible theme colors and a small box in " + (darkTheme ? "dark" : "light") + " mode");
+                        var tooltipScreenshots = Environment.GetEnvironmentVariable("MASCOT_THEME_SCREENSHOT_DIR");
+                        if (!string.IsNullOrWhiteSpace(tooltipScreenshots))
+                            LibraryFeatureTests.Capture(tip, Path.Combine(tooltipScreenshots,
+                                "project-tooltip-" + (darkTheme ? "dark" : "light") + "-" +
+                                (ReferenceEquals(button, selector.MonitorAll) ? "monitor" : "exclude") + ".png"));
+                    }
+                }
+                selector.AddChat(new() { Agent = CodexMascot.Core.AgentKind.Codex, Id = "preview-chat", ProjectPath = project, Title = "Preview" });
+                selector.ExcludeAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                check(selector.ProjectChoices[project].IsChecked == false && selector.ChatChoices["Codex:preview-chat"].IsChecked == false,
+                    "exclude-all icon turns off visible projects and chats");
+                selector.MonitorAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                check(selector.ProjectChoices[project].IsChecked == true && selector.ChatChoices["Codex:preview-chat"].IsChecked == true,
+                    "monitor-all icon turns on visible projects and chats");
+                selector.ChatChoices["Codex:preview-chat"].IsChecked = true;
+                selector.RecentLimit.Value = 12;
+                selector.RecentLimit.CommitValue(12);
+                check(manager.IsEditing && !manager.Configuration.Monitor.AutoIncludeNewChats &&
+                      manager.Configuration.Monitor.RecentSessionLimit == 12 &&
+                      CodexMascot.Core.ChatWatchPolicy.Allows(manager.Configuration.Monitor, CodexMascot.Core.AgentKind.Codex, "preview-chat", project) &&
+                      !CodexMascot.Core.ChatWatchPolicy.Allows(manager.Configuration.Monitor, CodexMascot.Core.AgentKind.Codex, "future-chat", project) &&
+                      File.ReadAllText(AppPaths.ConfigFile) == beforeProjects,
+                    "project choices and recent limit affect live monitoring before Confirm without writing disk");
                 selector.Cancel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                check(File.ReadAllText(AppPaths.ConfigFile) == beforeProjects, "project selection cancellation preserves settings");
+                check(!manager.IsEditing && manager.Configuration.Monitor.AutoIncludeNewChats == beforeAutoInclude &&
+                      manager.Configuration.Monitor.RecentSessionLimit == beforeRecentLimit &&
+                      !manager.Configuration.Monitor.Chats.Any(c => c.Id == "preview-chat") &&
+                      File.ReadAllText(AppPaths.ConfigFile) == beforeProjects, "project selection cancellation restores live and saved settings");
             }
             finally { selector.Close(); }
             selector = new ProjectSelectionWindow(manager) { ShowActivated = false, ShowInTaskbar = false };
@@ -78,6 +139,9 @@ internal static class SettingsTransactionTests
                 selector.AddChat(new() { Agent = CodexMascot.Core.AgentKind.Claude, Id = "test-chat", ProjectPath = project, Title = "Claude chat" });
                 selector.ChatChoices["Codex:normal-chat"].IsChecked = true;
                 selector.ChatChoices["Claude:test-chat"].IsChecked = true;
+                check(manager.Configuration.Monitor.Chats.Any(c => c.Agent == CodexMascot.Core.AgentKind.Claude && c.Id == "test-chat" && c.Enabled) &&
+                      !manager.Configuration.Monitor.Chats.First(c => c.Agent == CodexMascot.Core.AgentKind.Codex && c.Id == "test-chat").Enabled,
+                    "individual chat checkboxes apply to the live filter immediately");
                 selector.ProjectGroups[project].IsExpanded = true;
                 check(selector.ChatChoices["Codex:test-chat"].IsChecked == false, "choosing siblings does not enable excluded test chat");
                 selector.UpdateLayout();
@@ -95,6 +159,52 @@ internal static class SettingsTransactionTests
                 check(CodexMascot.Core.ChatWatchPolicy.Allows(saved, CodexMascot.Core.AgentKind.Codex, "normal-chat", project) && !CodexMascot.Core.ChatWatchPolicy.Allows(saved, CodexMascot.Core.AgentKind.Codex, "test-chat", project), "same-folder individual chat choices survive reload");
                 check(CodexMascot.Core.ChatWatchPolicy.Allows(saved, CodexMascot.Core.AgentKind.Claude, "test-chat", project), "same chat ID in another agent stays independent");
                 check(!CodexMascot.Core.ChatWatchPolicy.Allows(saved, CodexMascot.Core.AgentKind.Codex, "new-chat", project), "new chat in existing folder stays excluded with auto off");
+            }
+            finally { selector.Close(); }
+            // Saved choices outside the current scan remain stored, but do not
+            // clutter the picker or get reset when the visible subset is saved.
+            selector = new ProjectSelectionWindow(manager) { ShowActivated = false, ShowInTaskbar = false };
+            try
+            {
+                selector.Show();
+                check(selector.ProjectChoices.Count == 0 && selector.ChatChoices.Count == 0, "picker omits saved chats outside the current monitoring range");
+                selector.Confirm.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var preserved = new CustomizationManager().Configuration.Monitor;
+                check(CodexMascot.Core.ChatWatchPolicy.Allows(preserved, CodexMascot.Core.AgentKind.Codex, "normal-chat", project) &&
+                      !CodexMascot.Core.ChatWatchPolicy.Allows(preserved, CodexMascot.Core.AgentKind.Codex, "test-chat", project) &&
+                      !CodexMascot.Core.ProjectWatchPolicy.Allows(preserved, excluded), "saving a filtered picker retains hidden include and exclude choices");
+            }
+            finally { selector.Close(); }
+            var beforeRescan = File.ReadAllText(AppPaths.ConfigFile);
+            selector = new ProjectSelectionWindow(manager, limit => Task.FromResult<IReadOnlyList<CodexMascot.Core.ChatWatchEntry>>(
+                new[]
+                {
+                    new CodexMascot.Core.ChatWatchEntry { Agent = CodexMascot.Core.AgentKind.Codex, Id = "rescan-one", ProjectPath = project, Title = "First" },
+                    new CodexMascot.Core.ChatWatchEntry { Agent = CodexMascot.Core.AgentKind.Codex, Id = "rescan-two", ProjectPath = excluded, Title = "Second" }
+                }.Take(limit).ToArray())) { ShowActivated = false, ShowInTaskbar = false };
+            try
+            {
+                selector.Show();
+                WaitFor(() => selector.ChatChoices.Count == 2);
+                check(selector.ChatChoices.Count == 2 && selector.ProjectChoices.Count == 2, "initial project scan shows chats and folders within the recent limit");
+                selector.ProjectChoices[excluded].IsChecked = true;
+                selector.ChatChoices["Codex:rescan-two"].IsChecked = false;
+                selector.RecentLimit.CommitValue(1);
+                WaitFor(() => selector.ChatChoices.Count == 1);
+                check(selector.ChatChoices.Count == 1 && selector.ProjectChoices.Count == 1 &&
+                      !selector.ChatChoices.ContainsKey("Codex:rescan-two") && !selector.ProjectChoices.ContainsKey(excluded) &&
+                      manager.Configuration.Monitor.Chats.Any(c => c.Id == "rescan-two" && !c.Enabled),
+                    "reducing recent limit removes out-of-range rows but preserves their draft choices");
+                selector.RecentLimit.CommitValue(2);
+                WaitFor(() => selector.ChatChoices.Count == 2);
+                check(selector.ChatChoices.Count == 2 && selector.ProjectChoices.Count == 2 &&
+                      selector.ChatChoices["Codex:rescan-two"].IsChecked == false &&
+                      File.ReadAllText(AppPaths.ConfigFile) == beforeRescan,
+                    "increasing recent limit restores rows and unsaved selections without writing settings");
+                selector.Cancel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                check(!manager.Configuration.Monitor.Chats.Any(c => c.Id is "rescan-one" or "rescan-two") &&
+                      File.ReadAllText(AppPaths.ConfigFile) == beforeRescan,
+                    "cancel after live rescans rolls back all newly discovered choices");
             }
             finally { selector.Close(); }
             foreach (var kind in new[] { CodexMascot.Core.AgentKind.Codex, CodexMascot.Core.AgentKind.Claude })
@@ -119,6 +229,17 @@ internal static class SettingsTransactionTests
             result.Show(); result.UpdateLayout(); return result;
         }
         void Pump() { window?.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle); window?.UpdateLayout(); }
+        void WaitFor(Func<bool> condition)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (!condition() && DateTime.UtcNow < deadline)
+            {
+                var frame = new DispatcherFrame();
+                var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(25) };
+                timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
+                timer.Start(); Dispatcher.PushFrame(frame);
+            }
+        }
     }
     private static IEnumerable<DependencyObject> Children(DependencyObject root)
     {

@@ -28,13 +28,24 @@ public sealed class DesktopSessionMonitor
     private DateTimeOffset? _lastEvent;
     private long _hookCount;
     private bool _initialized;
+    private int _rescanRequested;
     public event EventHandler<CodexEvent>? EventReceived;
     public event EventHandler<MonitorHealth>? HealthChanged;
     public string CodexHome { get; }
     public string HookDirectory { get; }
     public IAgentAdapter Adapter { get; }
     public AgentKind Kind => Adapter.Kind;
-    public int RecentSessionLimit { get; }
+    private int _recentSessionLimit;
+    public int RecentSessionLimit
+    {
+        get => Volatile.Read(ref _recentSessionLimit);
+        set
+        {
+            var limit = Math.Clamp(value, 1, 1000);
+            if (Interlocked.Exchange(ref _recentSessionLimit, limit) != limit)
+                Interlocked.Exchange(ref _rescanRequested, 1);
+        }
+    }
     public DesktopSessionMonitor(string codexHome, string hookDirectory, IAgentAdapter? adapter = null, int recentSessionLimit = 100)
     { CodexHome = codexHome; HookDirectory = hookDirectory; Adapter = adapter ?? AgentAdapters.Codex; RecentSessionLimit = Math.Clamp(recentSessionLimit, 1, 1000); }
 
@@ -60,7 +71,7 @@ public sealed class DesktopSessionMonitor
             HealthChanged?.Invoke(this, new(0, _lastEvent, _hookCount, Adapter.MissingRootMessage));
             return;
         }
-        if (DateTimeOffset.UtcNow >= _nextScan)
+        if (Interlocked.Exchange(ref _rescanRequested, 0) != 0 || DateTimeOffset.UtcNow >= _nextScan)
         {
             var recent = new DirectoryInfo(sessionsRoot).EnumerateFiles("*.jsonl", new EnumerationOptions
                 { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint })

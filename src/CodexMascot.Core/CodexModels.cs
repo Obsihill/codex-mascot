@@ -66,7 +66,11 @@ public sealed record AggregationResult(
     bool ShouldNotify,
     string? ThreadId,
     string? Message,
-    IReadOnlyList<JobSnapshot> Jobs);
+    IReadOnlyList<JobSnapshot> Jobs)
+{
+    // A fresh notification belongs to one event, not to the aggregate task state.
+    public MascotState? NotificationState { get; init; }
+}
 
 public static class JsonElementExtensions
 {

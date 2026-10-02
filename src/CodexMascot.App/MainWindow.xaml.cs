@@ -11,13 +11,13 @@ namespace CodexMascot.App;
 public partial class MainWindow : Window
 {
     private readonly StatusAggregator _aggregator = new();
-    private readonly CompletionPopupPolicy _completionPopup = new();
     private readonly CustomizationManager _customization = new();
     private LibraryStore _library = null!;
     private readonly MascotPresentationGroup _presentations = new();
     private Window? _workspaceSettings;
     private readonly System.Windows.Threading.DispatcherTimer _foregroundTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
     private AgentKind _popupAgent;
+    private string? _popupThreadId;
     private DateTimeOffset _foregroundDismissAfter;
     private readonly System.Windows.Threading.DispatcherTimer _monitorEditTimer = new() { Interval = TimeSpan.FromMilliseconds(600) };
     private readonly SemaphoreSlim _monitorGate = new(1, 1);
@@ -28,11 +28,13 @@ public partial class MainWindow : Window
     private readonly TrayThemeIcon _trayTheme;
     private CancellationTokenSource? _monitorCancel;
     private readonly List<Task> _monitorTasks = new();
+    private readonly Dictionary<AgentKind, DesktopSessionMonitor> _sessionMonitors = new();
     private bool _closing, _exitRequested;
     private Window? _projectSelection;
     private string? _hookError;
     private readonly Dictionary<AgentKind, MonitorHealth> _health = new();
     private readonly Dictionary<(AgentKind Kind, string Id), string> _projectByThread = new();
+    private readonly HashSet<(AgentKind Kind, string Id)> _activeChats = new();
     private readonly string _journal = Path.Combine(AppPaths.ConfigDirectory, "events.jsonl");
 
     public MainWindow()
@@ -126,7 +128,7 @@ public partial class MainWindow : Window
             _customization.Configuration.Monitor.Provider = ProviderSetting();
             _customization.Save();
             _aggregator.Clear();
-            _completionPopup.Acknowledge();
+            _activeChats.Clear();
             HideMascots();
             _health.Clear();
             RefreshJobs();
@@ -145,6 +147,7 @@ public partial class MainWindow : Window
             {
                 var watched = kind;
                 var monitor = new DesktopSessionMonitor(HomeFor(watched), HookIntegration.EventDirectoryFor(watched), AgentAdapters.For(watched), _customization.Configuration.Monitor.RecentSessionLimit);
+                _sessionMonitors[watched] = monitor;
                 monitor.EventReceived += (_, e) => Dispatch(() =>
                 {
                     if (!ct.IsCancellationRequested) ReceiveMonitoredEvent(watched, e);
@@ -183,15 +186,36 @@ public partial class MainWindow : Window
         if (_projectSelection is not null) { _projectSelection.Activate(); return; }
         var monitor = _customization.Configuration.Monitor;
         var homes = EnabledKinds().Select(k => (Kind: k, Home: HomeFor(k))).ToArray();
-        var dialog = new ProjectSelectionWindow(_customization, () => Task.Run<IReadOnlyList<ChatWatchEntry>>(() =>
-            homes.SelectMany(h => ChatWatchPolicy.Discover(h.Home, AgentAdapters.For(h.Kind), monitor.RecentSessionLimit))
-                .ToArray())) { Owner = this };
+        var dialog = new ProjectSelectionWindow(_customization, limit =>
+        {
+            // Capture active chats on the UI thread for each rescan, including
+            // turns that started after this picker was opened.
+            var activeEntries = monitor.Chats.Where(c => homes.Any(h => h.Kind == c.Agent) && _activeChats.Contains((c.Agent, c.Id)))
+                .Select(c => new ChatWatchEntry { Agent = c.Agent, Id = c.Id, ProjectPath = c.ProjectPath, Title = c.Title, Enabled = c.Enabled }).ToArray();
+            return Task.Run<IReadOnlyList<ChatWatchEntry>>(() =>
+                homes.SelectMany(h => ChatWatchPolicy.Discover(h.Home, AgentAdapters.For(h.Kind), limit))
+                    .Concat(activeEntries).DistinctBy(c => ChatWatchPolicy.Key(c.Agent, c.Id)).ToArray());
+        }) { Owner = this };
+        dialog.SelectionChanged += (_, _) =>
+        {
+            foreach (var session in _sessionMonitors.Values) session.RecentSessionLimit = monitor.RecentSessionLimit;
+            RefreshJobs();
+            if (_popupThreadId is { } popupId && _aggregator.Jobs.FirstOrDefault(j => j.ThreadId == popupId) is { } popup && !IsWatched(popup))
+                HideMascots();
+        };
         _projectSelection = dialog;
-        dialog.Closed += (_, _) => { _projectSelection = null; if (dialog.Accepted) ScheduleMonitorUpdate(); };
+        dialog.Closed += (_, _) => { _projectSelection = null; };
         dialog.Show();
     }
     internal void ReceiveMonitoredEvent(AgentKind kind, CodexEvent e)
     {
+        if (e.ThreadId is { Length: > 0 } id)
+        {
+            if (e.Kind == CodexEventKind.TurnStarted) _activeChats.Add((kind, id));
+            else if (e.Kind is CodexEventKind.TurnCompleted or CodexEventKind.ThreadClosed ||
+                     e.Kind == CodexEventKind.ThreadStatusChanged && e.Status == "idle")
+                _activeChats.Remove((kind, id));
+        }
         var key = (kind, e.ThreadId ?? e.SourceId);
         var path = ProjectWatchPolicy.Normalize(e.ProjectPath);
         if (path is not null) _projectByThread[key] = path;
@@ -205,7 +229,7 @@ public partial class MainWindow : Window
             try { _customization.Save(); }
             catch (Exception ex) { Log(Loc.T("저장 실패: ") + ex.Message); }
         }
-        if (ChatWatchPolicy.Allows(monitor, kind, e.ThreadId, path)) HandleEvent(e with { ProjectPath = path });
+        if (ChatWatchPolicy.Allows(monitor, kind, e.ThreadId, path)) HandleEvent(e with { ProjectPath = path }, kind);
     }
     private void ShowHealth()
     {
@@ -224,6 +248,7 @@ public partial class MainWindow : Window
         _monitorCancel?.Cancel();
         if (_monitorTasks.Count > 0) await Task.WhenAll(_monitorTasks);
         _monitorTasks.Clear();
+        _sessionMonitors.Clear();
         _monitorCancel?.Dispose(); _monitorCancel = null;
     }
     private async void Monitor_OnClick(object sender, RoutedEventArgs e)
@@ -237,7 +262,7 @@ public partial class MainWindow : Window
         _monitorPaused = true;
         if (_customization.IsEditing) { Log(Loc.T("확인을 누르면 연결 설정에 적용됩니다.")); return; }
         await _monitorGate.WaitAsync();
-        try { await StopMonitoring(); _aggregator.Clear(); _completionPopup.Acknowledge(); RefreshJobs(); HideMascots(); ConnectionTextBlock.Text = Loc.T("감시 정지됨 · 원래 도구의 작업은 계속됩니다."); }
+        try { await StopMonitoring(); _aggregator.Clear(); RefreshJobs(); HideMascots(); ConnectionTextBlock.Text = Loc.T("감시 정지됨 · 원래 도구의 작업은 계속됩니다."); }
         finally { _monitorGate.Release(); }
     }
     private void BrowseHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(CodexHomeTextBox, Loc.T("Codex 데이터 폴더 (.codex)를 선택하세요."));
@@ -246,31 +271,33 @@ public partial class MainWindow : Window
         using var dialog = new Forms.FolderBrowserDialog { Description = title, UseDescriptionForTitle = true, SelectedPath = box.Text };
         if (dialog.ShowDialog() == Forms.DialogResult.OK) box.Text = dialog.SelectedPath;
     }
-    private void HandleEvent(CodexEvent e)
+    private void HandleEvent(CodexEvent e, AgentKind kind)
     {
+        var before = VisibleState();
         var result = _aggregator.Apply(e);
-        _completionPopup.Observe(result.Jobs);
+        var visibleJobs = _aggregator.Jobs.Where(IsWatched).ToArray();
+        var visibleState = StateFor(visibleJobs);
+        var visibleResult = result with { State = visibleState, StateChanged = visibleState != before, Jobs = visibleJobs };
+        var presentation = NotificationPresentationPolicy.SelectState(visibleResult,
+            _presentations.IsPresenting ? _presentations.State : null,
+            _presentations.HasHeldNotifications, _popupThreadId);
         RefreshJobs();
         if (!e.IsReplay && e.Kind != CodexEventKind.ItemCompleted)
         {
-            try { File.AppendAllText(_journal, JsonSerializer.Serialize(new { time = e.Time, e.SourceId, e.ThreadId, kind = e.Kind.ToString(), state = result.State.ToString() }) + Environment.NewLine); }
+            try { File.AppendAllText(_journal, JsonSerializer.Serialize(new { time = e.Time, e.SourceId, e.ThreadId, kind = e.Kind.ToString(), state = result.State.ToString(), notification = result.NotificationState?.ToString(), presentation = presentation?.ToString() }) + Environment.NewLine); }
             catch (IOException) { }
         }
-        if (result.StateChanged) Present(result.State, !e.IsReplay);
+        if (presentation is { } state)
+            Present(state, !e.IsReplay, result.ShouldNotify ? kind : null, result.ShouldNotify ? e.ThreadId : null);
     }
-    private void Present(MascotState state, bool sound)
+    private void Present(MascotState state, bool sound, AgentKind? notificationAgent = null, string? notificationThreadId = null)
     {
-        var keepCompleted = _library.Library.Eligible(MascotState.Completed).Any(m => m.Settings(MascotState.Completed).HoldUntilClick == true);
-        var resolved = _completionPopup.Resolve(state, keepCompleted);
-        if (resolved == MascotState.Completed && keepCompleted &&
-            _presentations.IsPresenting && _presentations.State == MascotState.Completed) return;
-        sound &= resolved == state;
-        state = resolved;
         if (state is MascotState.Disconnected or MascotState.Connecting ||
             state == MascotState.Idle && !_customization.Configuration.Global.ShowIdle)
         { HideMascots(); return; }
         _presentations.Show(_library, _customization, state, sound);
-        _popupAgent = ActivationTarget(state);
+        _popupAgent = notificationAgent ?? ActivationTarget(state);
+        _popupThreadId = notificationThreadId;
         _foregroundDismissAfter = DateTimeOffset.UtcNow.AddMilliseconds(
             state is MascotState.Completed or MascotState.NeedsAttention or MascotState.Failed or MascotState.Interrupted
                 ? MascotPresentationGroup.NotificationVisibleMilliseconds(_library, _customization, state) : 0);
@@ -278,12 +305,30 @@ public partial class MainWindow : Window
     private void RefreshJobs()
     {
         _jobs.Clear();
-        foreach (var j in _aggregator.Jobs)
+        var visible = _aggregator.Jobs.Where(IsWatched).ToArray();
+        foreach (var j in visible)
             _jobs.Add(new(j.ThreadId, StateName(j.State), (j.ProjectPath is null ? Loc.T("(프로젝트 없음)") : Path.GetFileName(j.ProjectPath.TrimEnd('\\','/'))) + " · " + j.ThreadId[..Math.Min(8, j.ThreadId.Length)],
                 j.LastUpdated == DateTimeOffset.MinValue ? "—" : j.LastUpdated.ToLocalTime().ToString("HH:mm:ss"),
                 Loc.T(j.Source), Loc.CoreMessage(j.LastMessage), j.ProjectPath));
-        StatusTextBlock.Text = StateName(_aggregator.State);
-        _tray.Text = AppBrand.Name + " · " + StateName(_aggregator.State);
+        StatusTextBlock.Text = StateName(StateFor(visible));
+        _tray.Text = AppBrand.Name + " · " + StateName(StateFor(visible));
+    }
+    private MascotState VisibleState() => StateFor(_aggregator.Jobs.Where(IsWatched));
+    private static MascotState StateFor(IEnumerable<JobSnapshot> jobs)
+    {
+        var visible = jobs.ToArray();
+        if (visible.Any(j => j.NeedsAttention)) return MascotState.NeedsAttention;
+        foreach (var state in new[] { MascotState.Failed, MascotState.Interrupted, MascotState.Completed })
+            if (visible.Any(j => j.HasUnreadResult && j.State == state)) return state;
+        if (visible.Any(j => j.State == MascotState.Running)) return MascotState.Running;
+        return visible.Any(j => j.State == MascotState.Disconnected) ? MascotState.Disconnected : MascotState.Idle;
+    }
+    private bool IsWatched(JobSnapshot job)
+    {
+        var kind = job.Source.StartsWith("Claude", StringComparison.Ordinal) ? AgentKind.Claude : AgentKind.Codex;
+        var path = job.ProjectPath;
+        if (path is null) _projectByThread.TryGetValue((kind, job.ThreadId), out path);
+        return ChatWatchPolicy.Allows(_customization.Configuration.Monitor, kind, job.ThreadId, path);
     }
     internal static string StateName(MascotState state) => state switch
     {
@@ -295,7 +340,7 @@ public partial class MainWindow : Window
     // so the target is read before acknowledging clears the unread flags.
     private AgentKind ActivationTarget(MascotState state)
     {
-        var ranked = _aggregator.Jobs
+        var ranked = _aggregator.Jobs.Where(IsWatched)
             .OrderByDescending(j => j.State == state)
             .ThenByDescending(j => j.NeedsAttention || j.HasUnreadResult)
             .ThenByDescending(j => j.LastUpdated)
@@ -331,7 +376,6 @@ public partial class MainWindow : Window
             (j.Source.StartsWith("Claude", StringComparison.Ordinal) ? AgentKind.Claude : AgentKind.Codex) == kind).ToArray())
         {
             _aggregator.Acknowledge(job.ThreadId);
-            _completionPopup.Acknowledge(job.ThreadId);
         }
         HideMascots();
         RefreshJobs();
@@ -379,7 +423,7 @@ public partial class MainWindow : Window
     private void ApplyConfiguration()
     {
         if (_presentations.State == MascotState.Idle && !_customization.Configuration.Global.ShowIdle) _presentations.Clear();
-        else if (_aggregator.State == MascotState.Idle && _customization.Configuration.Global.ShowIdle && !_presentations.IsPresenting)
+        else if (VisibleState() == MascotState.Idle && _customization.Configuration.Global.ShowIdle && !_presentations.IsPresenting)
             _presentations.Show(_library, _customization, MascotState.Idle, sound: false);
         else _presentations.ApplyPreferences(_library, _customization);
     }
@@ -394,7 +438,7 @@ public partial class MainWindow : Window
         }
     }
     private void Hide_OnClick(object sender, RoutedEventArgs e) => Hide();
-    private void HideMascots() => _presentations.Clear();
+    private void HideMascots() { _presentations.Clear(); _popupThreadId = null; }
     internal void ExitApplication()
     {
         _exitRequested = true;
