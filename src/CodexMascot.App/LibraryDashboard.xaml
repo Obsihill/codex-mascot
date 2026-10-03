@@ -253,7 +253,18 @@
                                       ToolTip="{local:Loc Key=L5CEF6AB1549A}"/>
                             <Button x:Name="PositionButton" Content="{local:Loc Key=L76A4C8BB26AD}" local:Pencil.Icon="Position" Margin="0,8,0,16" Click="Position_OnClick"/>
                             <Button x:Name="TestButton" Content="{local:Loc Key=LBC19D3B3C9E4}" local:Pencil.Icon="Play" AutomationProperties.Name="{local:Loc Key=LBC19D3B3C9E4}" Click="Test_OnClick" Background="{Binding AccentButton, Source={x:Static local:PencilPalette.Current}}" Foreground="{Binding OnButton, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding AccentButton, Source={x:Static local:PencilPalette.Current}}"/>
-                            <Button x:Name="ResetSettingsButton" Content="{local:Loc Key=LB81DEEE16407}" local:Pencil.Icon="Reset" Background="{Binding OrangeSurface, Source={x:Static local:PencilPalette.Current}}" Foreground="{Binding OrangeInk, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding OrangeLine, Source={x:Static local:PencilPalette.Current}}" Margin="0,12,0,0" Click="ResetSettings_OnClick"/>
+                            <StackPanel x:Name="SelectedSettingsActions" Orientation="Horizontal" Margin="0,12,0,0">
+                                <Button x:Name="ResetSettingsButton" Content="" local:Pencil.Icon="Reset" Width="42" Height="38" Padding="8" Margin="0,0,8,0"
+                                        Background="{Binding OrangeSurface, Source={x:Static local:PencilPalette.Current}}" Foreground="{Binding OrangeInk, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding OrangeLine, Source={x:Static local:PencilPalette.Current}}"
+                                        AutomationProperties.Name="{Binding [설정 초기화], Source={x:Static local:Loc.Current}}" ToolTipService.InitialShowDelay="200" Click="ResetSettings_OnClick">
+                                    <Button.ToolTip><ToolTip Style="{StaticResource CompactPencilToolTip}" Content="{Binding [설정 초기화 · 설치됨 원본의 설정으로 되돌립니다.], Source={x:Static local:Loc.Current}}"/></Button.ToolTip>
+                                </Button>
+                                <Button x:Name="ApplySettingsButton" Content="" local:Pencil.Icon="Apply" Width="42" Height="38" Padding="8"
+                                        AutomationProperties.Name="{Binding [설정 적용], Source={x:Static local:Loc.Current}}" ToolTipService.InitialShowDelay="200" Click="ApplySettings_OnClick">
+                                    <Button.ToolTip><ToolTip Style="{StaticResource CompactPencilToolTip}" Content="{Binding [설정 적용 · 현재 설정을 설치됨 원본에 적용합니다.], Source={x:Static local:Loc.Current}}"/></Button.ToolTip>
+                                </Button>
+                            </StackPanel>
+                            <Button x:Name="EditMascotButton" Content="{Binding [마스코트 수정], Source={x:Static local:Loc.Current}}" local:Pencil.Icon="Edit" Margin="0,8,0,0" Click="EditMascot_OnClick"/>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

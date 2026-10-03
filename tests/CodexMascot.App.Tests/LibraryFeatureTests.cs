@@ -56,9 +56,24 @@ internal static class LibraryFeatureTests
         foreach (var pair in bot.States) slots[pair.Key] = pair.Value.Image;
         var package = MascotPackageEditor.BuildPackage("Bundle", slots, new HashSet<string>(), manager, bot);
         check(package.States.Count == 6 && File.ReadAllBytes(manager.ResolveAsset(package.CoverImage)!).SequenceEqual(File.ReadAllBytes(manager.ResolveAsset(bot.CoverImage)!)) && package.For(MascotState.Failed).Image != package.For(MascotState.Completed).Image, "package editor saves a cover plus state-specific media in its own folder");
-        slots.Remove("failed"); var rejected = false;
-        try { MascotPackageEditor.BuildPackage("Incomplete", slots, new HashSet<string>(), manager); } catch (InvalidOperationException) { rejected = true; }
-        check(rejected, "registration rejects incomplete mascot packages");
+        slots.Remove("failed");
+        var partial = MascotPackageEditor.BuildPackage("Incomplete", slots, new HashSet<string>(), manager);
+        check(partial.For(MascotState.Failed).Image is null && partial.CoverImage is not null,
+            "registration permits an omitted state without borrowing another state's image");
+        var empty = MascotPackageEditor.BuildPackage("Name only", new Dictionary<string, string?>(), new HashSet<string>(), manager);
+        check(empty.CoverImage is null && empty.States.Count == 6 && empty.States.Values.All(m => m.Image is null) &&
+              MascotFolderImport.Read(new MascotFolderLibrary(AppPaths.LibraryDirectory).PackageDirectory(empty.Id)).CoverImage is null,
+            "name-only registration creates a portable package with no placeholder media");
+        store.Library.Installed.Add(empty); store.Library.Select(empty.Id); store.Save();
+        var emptyReloaded = new LibraryStore(file);
+        check(emptyReloaded.Library.Installed.Single(m => m.Id == empty.Id).CoverImage is null &&
+              emptyReloaded.Library.Installed.Single(m => m.Id == empty.Id).States.Values.All(m => m.Image is null) &&
+              !emptyReloaded.Library.Eligible(MascotState.Completed).Any(m => m.SourceId == empty.Id),
+            "empty media stays empty after reload and cannot open a missing-media notification");
+        var rejected = false;
+        try { MascotPackageEditor.BuildPackage(" ", new Dictionary<string, string?>(), new HashSet<string>(), manager); }
+        catch (InvalidOperationException) { rejected = true; }
+        check(rejected, "a mascot name is still required");
         var fileSlots = new Dictionary<string, string?> { ["cover"] = Path.Combine(AppContext.BaseDirectory, "assets", "images", "idle.png") };
         foreach (var state in CustomizationManager.States)
             fileSlots[MascotConfiguration.StateKey(state)] = manager.ResolveImage(state);
@@ -72,6 +87,12 @@ internal static class LibraryFeatureTests
         {
             host.Show(); Pump();
             var installed = (ListBox)dashboard.FindName("InstalledList");
+            installed.SelectedItem = installed.Items.Cast<object>().Single(c =>
+                ((LibraryMascot)c.GetType().GetProperty("Mascot")!.GetValue(c)!).Id == empty.Id);
+            check(!((Button)dashboard.FindName("TestButton")).IsEnabled &&
+                  ((Image)dashboard.FindName("PreviewImage")).Source is null &&
+                  ((TextBlock)dashboard.FindName("PreviewError")).Visibility == Visibility.Collapsed,
+                "name-only mascots show a quiet empty preview and cannot start an empty media test");
             installed.SelectedIndex = 2;
             check(dashboard.AddMascot("cat") && dashboard.AddMascot("cat"), "UI allows duplicate independent selections");
             var volumeInput = (NumericDragInput)dashboard.FindName("VolumeInput"); volumeInput.CommitValue(.25);

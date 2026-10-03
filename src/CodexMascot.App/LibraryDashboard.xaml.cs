@@ -264,12 +264,11 @@ public partial class LibraryDashboard : UserControl
             // The whole-scope inspector is a package preview, not a playback state.
             if (_activeState is null)
             {
-                PreviewImage.Source = LoadThumbnail(_store.CoverPath(_current, _manager))
-                    ?? throw new FileNotFoundException(Loc.T("대표 이미지 없음"));
+                PreviewImage.Source = LoadThumbnail(_store.CoverPath(_current, _manager));
                 return;
             }
             var path = _store.MediaPath(_current, _manager, PreviewEvent);
-            if (path is null) throw new FileNotFoundException(Loc.T("이미지 없음"));
+            if (path is null) return;
             if (path.StartsWith("builtin:", StringComparison.Ordinal)) PreviewImage.Source = DemoMascotArtwork.Create(path[8..]);
             else if (MascotMedia.IsVideo(path))
             { PreviewVideo.Visibility = Visibility.Visible; PreviewVideo.Source = new Uri(path); PreviewVideo.SpeedRatio = _current.Settings(PreviewEvent).Speed; PreviewVideo.Play(); }
@@ -291,7 +290,8 @@ public partial class LibraryDashboard : UserControl
     {
         if (_current is null) return;
         StopTest(); _testMascot = _current; _testAll = _activeState is null;
-        foreach (var state in _activeState is { } selected ? new[] { selected } : CustomizationManager.States) _testStates.Enqueue(state);
+        foreach (var state in _activeState is { } selected ? new[] { selected } : CustomizationManager.States)
+            if (!string.IsNullOrWhiteSpace(_current.For(state).Image)) _testStates.Enqueue(state);
         AdvanceTest();
     }
     internal void AdvanceTest()

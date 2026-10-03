@@ -20,9 +20,9 @@ internal sealed class ProjectSelectionWindow : Window
     internal Dictionary<string, CheckBox> ChatChoices { get; } = new(StringComparer.Ordinal);
     internal Dictionary<string, Expander> ProjectGroups { get; } = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ChatWatchEntry> _chats = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, SizeChangedEventHandler> _projectResizers = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, SizeChangedEventHandler> _chatResizers = new(StringComparer.Ordinal);
     private readonly StackPanel _rows = new();
+    private readonly ScrollViewer _list = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Foreground = PencilPalette.Muted, Margin = new Thickness(0, 8, 0, 8) };
     private readonly CustomizationManager _manager;
     private readonly Func<int, Task<IReadOnlyList<ChatWatchEntry>>>? _discover;
@@ -94,7 +94,9 @@ internal sealed class ProjectSelectionWindow : Window
         ExcludeAll = ActionButton("모두 제외", "표시된 항목 전부 끄기", PencilIconKind.ExcludeAll,
             () => { foreach (var c in ProjectChoices.Values.Concat(ChatChoices.Values)) c.IsChecked = false; });
         Grid.SetColumn(actions, 1); summary.Children.Add(actions); options.Children.Add(summary);
-        root.Children.Add(new ScrollViewer { Content = _rows, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        _list.Content = _rows;
+        _list.ScrollChanged += (_, e) => { if (e.ViewportWidthChange != 0) UpdateRowWidths(); };
+        root.Children.Add(_list);
         UpdateCount();
         Confirm.Click += (_, _) => Accept(); Cancel.Click += (_, _) => Close();
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Close(); } };
@@ -149,32 +151,41 @@ internal sealed class ProjectSelectionWindow : Window
     {
         var path = _chats[key].ProjectPath;
         ((StackPanel)ProjectGroups[path].Content).Children.Remove(ChatChoices[key]);
-        if (_chatResizers.Remove(key, out var resize)) SizeChanged -= resize;
         ChatChoices.Remove(key); _chats.Remove(key);
         if (_chats.Values.Any(c => string.Equals(c.ProjectPath, path, StringComparison.OrdinalIgnoreCase))) return;
         _rows.Children.Remove(ProjectGroups[path]);
-        if (_projectResizers.Remove(path, out resize)) SizeChanged -= resize;
         ProjectGroups.Remove(path); ProjectChoices.Remove(path);
     }
     internal void AddProject(string path, bool enabled)
     {
         var normalized = ProjectWatchPolicy.Normalize(path);
         if (normalized is null || ProjectChoices.ContainsKey(normalized)) return;
-        var label = new StackPanel { MaxWidth = Math.Max(200, (ActualWidth > 0 ? ActualWidth : Width) - 110) };
-        SizeChangedEventHandler projectResize = (_, _) => label.MaxWidth = Math.Max(200, ActualWidth - 110);
-        SizeChanged += projectResize; _projectResizers[normalized] = projectResize;
+        var header = new Grid();
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var label = new StackPanel();
         label.Children.Add(new TextBlock { Text = Path.GetFileName(normalized) is { Length: > 0 } name ? name : normalized });
         label.Children.Add(new TextBlock { Text = normalized, TextWrapping = TextWrapping.Wrap, FontSize = 14, Foreground = PencilPalette.Muted });
-        // The shared checkbox style uses a text-only content template. This row
-        // supplies real controls for a wrapped two-line project label instead.
-        var check = new CheckBox { Content = label, ContentTemplate = null, ToolTip = normalized, IsChecked = enabled, Margin = new Thickness(0, 8, 10, 8), HorizontalContentAlignment = HorizontalAlignment.Stretch };
-        System.Windows.Automation.AutomationProperties.SetName(check, normalized);
+        header.Children.Add(label);
+        var explanation = Loc.T("이 폴더의 채팅을 모두 감시하거나 제외합니다.");
+        var check = new CheckBox { Content = "", IsChecked = enabled, VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0), ToolTip = new ToolTip
+            { Content = Loc.T("폴더 전체 감시") + " · " + explanation, Style = (Style)FindResource("CompactPencilToolTip") } };
+        Pencil.SetIcon(check, PencilIconKind.Folder);
+        System.Windows.Automation.AutomationProperties.SetName(check, Loc.T("폴더 전체 감시") + " · " + normalized);
+        System.Windows.Automation.AutomationProperties.SetHelpText(check, explanation);
+        ToolTipService.SetInitialShowDelay(check, 200);
+        ToolTipService.SetShowDuration(check, 10000);
+        // The folder toggle is inside the expander header; it must not also
+        // toggle the expander when clicked.
+        check.Click += (_, e) => e.Handled = true;
         ProjectChoices.Add(normalized, check);
-        var children = new StackPanel { Margin = new Thickness(24, 0, 0, 8) };
-        check.Content = Loc.T("폴더 전체 감시");
-        children.Children.Add(check);
-        var group = new Expander { Header = label, Content = children, IsExpanded = false, Foreground = PencilPalette.Ink };
+        Grid.SetColumn(check, 1); header.Children.Add(check);
+        var children = new StackPanel { Margin = new Thickness(24, 0, 0, 4) };
+        var group = new Expander { Header = header, Content = children, IsExpanded = false, Foreground = PencilPalette.Ink,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch };
         ProjectGroups.Add(normalized, group); _rows.Children.Add(group);
+        UpdateRowWidths();
         void SetChildren(bool value)
         {
             _updatingChecks = true;
@@ -196,7 +207,7 @@ internal sealed class ProjectSelectionWindow : Window
             if (!string.IsNullOrWhiteSpace(chat.Title))
             {
                 _chats[key].Title = chat.Title;
-                ((TextBlock)((StackPanel)existing.Content).Children[0]).Text = chat.Title;
+                ((TextBlock)((Grid)existing.Content).Children[0]).Text = chat.Title;
             }
             return;
         }
@@ -207,16 +218,23 @@ internal sealed class ProjectSelectionWindow : Window
         var enabled = (saved?.Enabled ?? AutoInclude.IsChecked == true) && ProjectChoices[path].IsChecked == true;
         var title = !string.IsNullOrWhiteSpace(chat.Title) ? chat.Title : saved?.Title;
         var text = string.IsNullOrWhiteSpace(title) ? Loc.T("제목 없는 채팅") : title;
-        var label = new StackPanel { MaxWidth = Math.Max(200, Width - 155) };
-        SizeChangedEventHandler chatResize = (_, _) => label.MaxWidth = Math.Max(200, ActualWidth - 155);
-        SizeChanged += chatResize; _chatResizers[key] = chatResize;
-        label.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap });
-        label.Children.Add(new TextBlock { Text = chat.Agent + " · " + chat.Id, FontSize = 14, Foreground = PencilPalette.Muted, TextWrapping = TextWrapping.Wrap });
-        var check = new CheckBox { Content = label, ContentTemplate = null, IsChecked = enabled, Margin = new Thickness(0, 6, 0, 6), ToolTip = chat.Id };
+        var label = new Grid();
+        label.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        label.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        label.Children.Add(new TextBlock { Text = text, TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center });
+        var identity = new TextBlock { Text = chat.Agent + " · " + chat.Id, FontFamily = PencilFonts.Numbers,
+            FontSize = 12, Foreground = PencilPalette.Muted, VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 260 };
+        Grid.SetColumn(identity, 1); label.Children.Add(identity);
+        var check = new CheckBox { Content = label, ContentTemplate = null, IsChecked = enabled,
+            Padding = new Thickness(0), Margin = new Thickness(0, 1, 0, 1), HorizontalContentAlignment = HorizontalAlignment.Stretch };
         System.Windows.Automation.AutomationProperties.SetName(check, text + " · " + chat.Agent + " · " + chat.Id);
         _chats[key] = new() { Agent = chat.Agent, Id = chat.Id, ProjectPath = path, Title = title ?? "", Enabled = enabled };
         ChatChoices[key] = check;
         ((StackPanel)ProjectGroups[path].Content).Children.Add(check);
+        UpdateRowWidths();
         check.Checked += (_, _) => {
             if (_updatingChecks) return;
             // Enabling one child must not enable its excluded siblings.
@@ -235,6 +253,17 @@ internal sealed class ProjectSelectionWindow : Window
         };
         check.Unchecked += (_, _) => PreviewSelection();
         UpdateCount();
+    }
+    private void UpdateRowWidths()
+    {
+        if (_list.ViewportWidth <= 0) return;
+        // StackPanel measures its children without a useful width constraint.
+        // Size rows from the scroll viewport, which shrinks when the vertical
+        // scrollbar appears, rather than from the outer window width.
+        var projectWidth = Math.Max(200, _list.ViewportWidth - 40);
+        var chatWidth = Math.Max(200, _list.ViewportWidth - 80);
+        foreach (var group in ProjectGroups.Values) ((Grid)group.Header).Width = projectWidth;
+        foreach (var check in ChatChoices.Values) ((Grid)check.Content).Width = chatWidth;
     }
     private void UpdateCount() => _status.Text = ProjectChoices.Count == 0 ? Loc.T("현재 감시 범위에 채팅 기록이 없습니다.") : Loc.F("프로젝트 {0}개 · 채팅 {1}개", ProjectChoices.Count, ChatChoices.Count);
     private void PreviewSelection()

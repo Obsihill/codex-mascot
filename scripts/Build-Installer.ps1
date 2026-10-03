@@ -46,7 +46,7 @@ New-Item -ItemType Directory -Path $payload -Force | Out-Null
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 
 try {
-    & $dotnetPath publish $projectPath --configuration Release --runtime win-x64 --self-contained true --output $payload
+    & $dotnetPath publish $projectPath --configuration Release --runtime win-x64 --self-contained true --output $payload '-p:TargetPlatformDisplayName=Windows'
     if ($LASTEXITCODE -ne 0) { throw "Self-contained publish failed with exit code $LASTEXITCODE." }
     foreach ($document in @('README.md', 'VALIDATION.md', 'THIRD-PARTY-NOTICES.txt', 'LICENSE')) {
         Copy-Item -LiteralPath (Join-Path $repoRoot $document) -Destination $payload

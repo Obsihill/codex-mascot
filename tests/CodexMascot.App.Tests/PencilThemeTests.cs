@@ -54,7 +54,7 @@ internal static class PencilThemeTests
                 check(input.ShowValueFill == (field is "VolumeInput" or "SpeedInput"), field + " opts into value fill only for volume and speed");
                 CheckHover(check, input, (PencilBorder)input.Content, field);
             }
-            foreach (var (button, kind) in new[] { ("TestButton", PencilIconKind.Play), ("AppSettingsButton", PencilIconKind.Settings), ("PositionButton", PencilIconKind.Position), ("ResetSettingsButton", PencilIconKind.Reset), ("RegisterButton", PencilIconKind.Add), ("DeleteButton", PencilIconKind.Delete) })
+            foreach (var (button, kind) in new[] { ("TestButton", PencilIconKind.Play), ("AppSettingsButton", PencilIconKind.Settings), ("PositionButton", PencilIconKind.Position), ("ResetSettingsButton", PencilIconKind.Reset), ("ApplySettingsButton", PencilIconKind.Apply), ("RegisterButton", PencilIconKind.Add), ("DeleteButton", PencilIconKind.Delete) })
             {
                 var control = (Button)dashboard.FindName(button); control.ApplyTemplate();
                 var glyph = (PencilIcon)control.Template.FindName("Icon", control);

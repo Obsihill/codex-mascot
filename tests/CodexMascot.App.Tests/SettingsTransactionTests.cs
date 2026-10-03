@@ -145,6 +145,37 @@ internal static class SettingsTransactionTests
                 selector.ProjectGroups[project].IsExpanded = true;
                 check(selector.ChatChoices["Codex:test-chat"].IsChecked == false, "choosing siblings does not enable excluded test chat");
                 selector.UpdateLayout();
+                var projectHeader = (Grid)selector.ProjectGroups[project].Header;
+                var folderCheck = selector.ProjectChoices[project];
+                check(ReferenceEquals(projectHeader.Children[1], folderCheck) && Grid.GetColumn(folderCheck) == 1 &&
+                      Pencil.GetIcon(folderCheck) == PencilIconKind.Folder && folderCheck.Content?.ToString() == "" &&
+                      folderCheck.ToolTip is ToolTip { Content: string folderHelp } && folderHelp.Contains("이 폴더의 채팅을 모두 감시하거나 제외합니다.") &&
+                      ToolTipService.GetInitialShowDelay(folderCheck) == 200 &&
+                      !((StackPanel)selector.ProjectGroups[project].Content).Children.Contains(folderCheck),
+                    "folder-wide watch is an explained icon at the project header's right edge, not a chat row");
+                var folderTip = (ToolTip)folderCheck.ToolTip;
+                foreach (var darkTheme in new[] { true, false })
+                {
+                    AppTheme.Apply(darkTheme);
+                    folderTip.ApplyTemplate(); folderTip.Measure(new Size(500, 100)); folderTip.Arrange(new Rect(folderTip.DesiredSize));
+                    check(ReferenceEquals(folderTip.Background, PencilPalette.Surface) &&
+                          ReferenceEquals(folderTip.Foreground, PencilPalette.Ink) && folderTip.FontSize == 12,
+                        "folder icon tooltip follows the " + (darkTheme ? "dark" : "light") + " theme");
+                    var tipShots = Environment.GetEnvironmentVariable("MASCOT_THEME_SCREENSHOT_DIR");
+                    if (!string.IsNullOrWhiteSpace(tipShots)) LibraryFeatureTests.Capture(folderTip,
+                        Path.Combine(tipShots, "folder-watch-tooltip-" + (darkTheme ? "dark" : "light") + ".png"));
+                }
+                var clickHeaderIcon = new RoutedEventArgs(Button.ClickEvent);
+                folderCheck.RaiseEvent(clickHeaderIcon);
+                check(clickHeaderIcon.Handled && selector.ProjectGroups[project].IsExpanded,
+                    "clicking the folder-wide watch icon does not collapse the project");
+                var chatRow = selector.ChatChoices["Codex:normal-chat"];
+                var chatLabel = (Grid)chatRow.Content;
+                check(chatRow.ToolTip is null && chatRow.Margin.Top == 1 && chatRow.Padding.Top == 0 &&
+                      Grid.GetColumn(chatLabel.Children[1]) == 1 &&
+                      ((TextBlock)chatLabel.Children[0]).Text == "Normal chat" &&
+                      ((TextBlock)chatLabel.Children[1]).Text == "Codex · normal-chat",
+                    "chat rows have no tooltip, keep their ID to the right of the title, and use compact spacing");
                 var visibleProjectText = Children(selector).OfType<TextBlock>().Select(t => t.Text).ToArray();
                 check(visibleProjectText.Contains("sample-project") && visibleProjectText.Contains(project) && visibleProjectText.Contains("excluded-project") && !visibleProjectText.Any(t => t.Contains("System.Windows.Controls.StackPanel")), "project rows actually render project names and full paths instead of control type names");
                 var screenshots = Environment.GetEnvironmentVariable("MASCOT_THEME_SCREENSHOT_DIR");
@@ -205,6 +236,34 @@ internal static class SettingsTransactionTests
                 check(!manager.Configuration.Monitor.Chats.Any(c => c.Id is "rescan-one" or "rescan-two") &&
                       File.ReadAllText(AppPaths.ConfigFile) == beforeRescan,
                     "cancel after live rescans rolls back all newly discovered choices");
+            }
+            finally { selector.Close(); }
+            selector = new ProjectSelectionWindow(manager) { ShowActivated = false, ShowInTaskbar = false };
+            try
+            {
+                selector.Show();
+                var longId = "01234567-89ab-cdef-0123-456789abcdef";
+                for (var i = 0; i < 24; i++)
+                    selector.AddChat(new() { Agent = CodexMascot.Core.AgentKind.Codex,
+                        Id = longId + i, ProjectPath = project, Title = "Chat " + i });
+                selector.ProjectGroups[project].IsExpanded = true;
+                var scroll = ((DockPanel)selector.Content).Children.OfType<ScrollViewer>().Single();
+                foreach (var width in new[] { 760d, 580d })
+                {
+                    selector.Width = width;
+                    selector.UpdateLayout();
+                    var header = (Grid)selector.ProjectGroups[project].Header;
+                    var identity = (TextBlock)((Grid)selector.ChatChoices["Codex:" + longId + 0].Content).Children[1];
+                    var headerRight = header.TransformToAncestor(scroll).Transform(new Point(header.ActualWidth, 0)).X;
+                    var identityRight = identity.TransformToAncestor(scroll).Transform(new Point(identity.ActualWidth, 0)).X;
+                    check(scroll.ComputedVerticalScrollBarVisibility == Visibility.Visible &&
+                          headerRight <= scroll.ViewportWidth - 2 && identityRight <= scroll.ViewportWidth - 2,
+                        $"project icon and chat ID stay clear of scrollbar at {width}px: header={headerRight:0.0}, ID={identityRight:0.0}, viewport={scroll.ViewportWidth:0.0}");
+                    var layoutScreenshots = Environment.GetEnvironmentVariable("MASCOT_THEME_SCREENSHOT_DIR");
+                    if (!string.IsNullOrWhiteSpace(layoutScreenshots)) LibraryFeatureTests.Capture(selector,
+                        Path.Combine(layoutScreenshots, "project-selection-scroll-" + (int)width + ".png"));
+                }
+                selector.Cancel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }
             finally { selector.Close(); }
             foreach (var kind in new[] { CodexMascot.Core.AgentKind.Codex, CodexMascot.Core.AgentKind.Claude })

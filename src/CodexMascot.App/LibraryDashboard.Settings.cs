@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Text.Json;
 using CodexMascot.Core;
 
 namespace CodexMascot.App;
@@ -31,6 +32,7 @@ public partial class LibraryDashboard
         var enabled = _activeState is null || _current.Events.Contains(MascotConfiguration.StateKey(_activeState.Value));
         foreach (var control in new UIElement[] { VolumeInput, SpeedInput, PositionButton, TestButton, LoopCheck, HoldCheck, TaskbarCheck })
             control.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+        TestButton.IsEnabled = enabled && states.Any(s => !string.IsNullOrWhiteSpace(_current.For(s).Image));
         var showDuration = enabled && _activeState is { } selectedState && !MascotMedia.IsVideo(_current.For(selectedState).Image);
         DurationInput.Visibility = showDuration ? Visibility.Visible : Visibility.Collapsed;
         DurationInput.IsEnabled = showDuration;
@@ -45,7 +47,9 @@ public partial class LibraryDashboard
         HoldCheck.ToolTip = Loc.T("마스코트를 클릭하거나 해당 Codex / Claude 창을 열면 확인 처리하고 닫습니다.");
         SetToggle(PlayCheck, Loc.T("재생"), Common(states.Select(s => _current.Events.Contains(MascotConfiguration.StateKey(s)))));
         StatePlaybackOptions.Visibility = _activeState is null ? Visibility.Collapsed : Visibility.Visible;
-        ResetSettingsButton.Visibility = _activeState is null ? Visibility.Visible : Visibility.Collapsed;
+        SelectedSettingsActions.Visibility = _activeState is null && _current.SourceId is not null ? Visibility.Visible : Visibility.Collapsed;
+        ResetSettingsButton.Visibility = ApplySettingsButton.Visibility = SelectedSettingsActions.Visibility;
+        EditMascotButton.Visibility = _activeState is null && _current.SourceId is null ? Visibility.Visible : Visibility.Collapsed;
         var samePosition = settings.Select(s => (s.Position, s.MonitorDevice, s.CustomLeft, s.CustomTop)).Distinct().Count() == 1;
         var sameScale = settings.Select(s => s.Scale ?? _manager.Configuration.Global.Scale).Distinct().Count() == 1;
         PositionButton.Content = samePosition && sameScale ? Loc.T("위치 크기 변경") : Loc.T("위치 크기 변경 ??");
@@ -77,22 +81,92 @@ public partial class LibraryDashboard
     }
     private void ResetSettings_OnClick(object sender, RoutedEventArgs e)
     {
-        if (_current is null || _activeState is not null) return;
+        if (_current is null || _current.SourceId is null || _activeState is not null) return;
+        var installed = _store.Library.Installed.FirstOrDefault(source => source.Id == _current.SourceId);
+        if (installed is null) return;
+        if (!ConfirmSettingsChange("설정 초기화 확인", "선택된 마스코트의 설정을 설치됨 원본의 설정으로 되돌릴까요?")) return;
         StopTest(); _history.BreakMerge();
         var m = _current;
-        Commit(DisplayName(m) + Loc.T(" · 설정 초기화"), () =>
-        {
-            var defaults = new LibraryMascot();
-            m.Volume = defaults.Volume; m.Speed = defaults.Speed; m.Loop = defaults.Loop;
-            m.Scale = 1;
-            m.Position = defaults.Position; m.CustomLeft = m.CustomTop = null; m.MonitorDevice = null;
-            m.Events = defaults.Events;
-            foreach (var state in CustomizationManager.States)
-            { m.For(state).Playback = new MascotPlaybackSettings { Scale = 1,
-                HoldUntilClick = (m.SourceId ?? m.Id) is "original" or "mascat" && state is MascotState.Completed or MascotState.NeedsAttention or MascotState.Failed,
-                ImageDurationMs = (m.SourceId ?? m.Id) == "mascat" ? 2000 : null }; m.For(state).SoundEnabled = true; }
-        });
+        Commit(DisplayName(m) + Loc.T(" · 설정 초기화"), () => CopySettings(installed, m));
         RefreshInspector(); ShowPreview();
+    }
+    private void ApplySettings_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_current is null || _current.SourceId is null || _activeState is not null) return;
+        var installed = _store.Library.Installed.FirstOrDefault(source => source.Id == _current.SourceId);
+        if (installed is null) return;
+        if (!ConfirmSettingsChange("설정 적용 확인",
+                "현재 선택된 마스코트의 설정을 설치됨 원본에 적용할까요? 다른 선택 항목의 설정은 바뀌지 않습니다.")) return;
+        StopTest(); _history.BreakMerge();
+        var selected = _current;
+        Commit(DisplayName(selected) + Loc.T(" · 설정 적용"), () => CopySettings(selected, installed));
+        RefreshInspector(); ShowPreview();
+    }
+    private static void CopySettings(LibraryMascot source, LibraryMascot target)
+    {
+        target.Volume = source.Volume; target.Speed = source.Speed; target.Loop = source.Loop;
+        target.Scale = source.Scale; target.Position = source.Position;
+        target.CustomLeft = source.CustomLeft; target.CustomTop = source.CustomTop;
+        target.MonitorDevice = source.MonitorDevice; target.Events = source.Events.ToList();
+        foreach (var state in CustomizationManager.States)
+        {
+            var from = source.For(state); var to = target.For(state);
+            to.Playback = from.Playback is null ? null :
+                JsonSerializer.Deserialize<MascotPlaybackSettings>(JsonSerializer.Serialize(from.Playback));
+            to.SoundEnabled = from.SoundEnabled;
+        }
+    }
+    private bool ConfirmSettingsChange(string title, string message)
+    {
+        var panel = new StackPanel { Margin = new Thickness(24) };
+        panel.Children.Add(new TextBlock { Text = Loc.T(message), TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 20) });
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var cancel = new Button { Name = "CancelSettingsChange", Content = Loc.T("취소"), IsCancel = true, IsDefault = true,
+            Margin = new Thickness(0, 0, 8, 0) };
+        var confirm = new Button { Name = "ConfirmSettingsChange", Content = Loc.T("확인") };
+        cancel.Click += (_, _) => Window.GetWindow(cancel)!.DialogResult = false;
+        confirm.Click += (_, _) => Window.GetWindow(confirm)!.DialogResult = true;
+        actions.Children.Add(cancel); actions.Children.Add(confirm); panel.Children.Add(actions);
+        return Dialog(Loc.T(title), panel).ShowDialog() == true;
+    }
+    private void EditMascot_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_current is not { SourceId: null } original || _activeState is not null) return;
+        StopTest(); StopPreview();
+        var editor = new MascotPackageEditor(_manager, original) { Owner = Window.GetWindow(this), Resources = Resources };
+        _editorDialog = editor;
+        try
+        {
+            if (editor.ShowDialog() == true && editor.Result is { } result) UpdateInstalledMascot(result);
+        }
+        finally { _editorDialog = null; ShowPreview(); }
+    }
+    internal bool UpdateInstalledMascot(LibraryMascot replacement)
+    {
+        var original = _store.Library.Installed.FirstOrDefault(m => m.Id == replacement.Id);
+        if (original is null || replacement.SourceId is not null) return false;
+        foreach (var state in CustomizationManager.States) replacement.Settings(state);
+        StopTest(); _history.BreakMerge();
+        if (!Commit(replacement.Name + Loc.T(" · 마스코트 수정"), () =>
+        {
+            var index = _store.Library.Installed.IndexOf(original);
+            _store.Library.Installed[index] = replacement;
+            foreach (var selected in _store.Library.Selected.Where(m => m.SourceId == replacement.Id))
+            {
+                selected.Name = replacement.Name;
+                selected.CoverImage = replacement.CoverImage;
+                foreach (var state in CustomizationManager.States)
+                {
+                    var source = replacement.For(state); var target = selected.For(state);
+                    target.Image = source.Image; target.Sound = source.Sound;
+                    target.Sounds = source.Sounds.ToList();
+                    target.SpriteColumns = source.SpriteColumns; target.SpriteRows = source.SpriteRows;
+                    target.FrameDurationMs = source.FrameDurationMs;
+                }
+            }
+        })) return false;
+        RefreshLists(); Inspect(replacement); return true;
     }
     private void Volume_OnChanged(object? sender, EventArgs e)
     {

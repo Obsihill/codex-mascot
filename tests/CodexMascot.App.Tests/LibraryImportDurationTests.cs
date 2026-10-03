@@ -47,7 +47,12 @@ internal static class LibraryImportDurationTests
         Reject(n => n["version"] = "1", "incorrect manifest value types rejected");
         Reject(n => n["format"] = "unrelated", "unrelated JSON is not a mascot package");
         Reject(n => n["mascot"]!["name"] = "", "empty imported name rejected");
-        Reject(n => n["mascot"]!["states"]!.AsObject().Remove("failed"), "incomplete state sets rejected");
+        var withoutState = JsonNode.Parse(original)!.AsObject();
+        withoutState["mascot"]!["states"]!.AsObject().Remove("failed");
+        File.WriteAllText(manifest, withoutState.ToJsonString());
+        check(MascotFolderImport.Read(folder).For(MascotState.Failed).Image is null,
+            "missing state media imports as an empty state");
+        File.WriteAllText(manifest, original);
         Reject(n => n["mascot"]!["coverImage"] = "../outside.png", "parent-directory traversal rejected");
         Reject(n => n["mascot"]!["coverImage"] = ".. /outside.png", "Windows trailing-space traversal aliases rejected");
         Reject(n => n["mascot"]!["coverImage"] = first.CoverImage, "absolute media paths rejected");
@@ -175,6 +180,7 @@ internal static class LibraryImportDurationTests
             }
             check(new LibraryStore(file).Library.Find(id)!.Settings(MascotState.Running).ImageDurationMs is not null, "duration survives reload and independent selected settings");
             if (states.IsVisible) Click("StateSettingsButton");
+            SettingsTransferTestHelpers.QueueResponse(check, "설정 초기화 확인", true);
             Click("ResetSettingsButton");
             check(CustomizationManager.States.All(s => Mascot().Settings(s).ImageDurationMs is null), "reset restores legacy/default event timing");
             dashboard.ReplayHistory(false);

@@ -46,12 +46,14 @@ public sealed class LibraryStore
             // The built-in samples and the original mascot have separate assets per state.
             var legacy = configuration ?? new MascotConfiguration();
             var builtin = m.Media?.StartsWith("builtin:", StringComparison.Ordinal) == true ? m.Media : null;
-            m.CoverImage ??= builtin is not null ? builtin + "/cover" :
-                m.Media is not null && !MascotMedia.IsVideo(m.Media) ? m.Media : legacy.For(MascotState.Idle).Image;
+            if (Library.FolderLayoutVersion < 1)
+                m.CoverImage ??= builtin is not null ? builtin + "/cover" :
+                    m.Media is not null && !MascotMedia.IsVideo(m.Media) ? m.Media : legacy.For(MascotState.Idle).Image;
             foreach (var state in CustomizationManager.States)
             {
                 var key = MascotConfiguration.StateKey(state);
-                if (m.States.TryGetValue(key, out var entry) && entry?.Image is not null) continue;
+                if (m.States.TryGetValue(key, out var entry) && entry is not null &&
+                    (entry.Image is not null || Library.FolderLayoutVersion >= 1)) continue;
                 var original = legacy.For(state);
                 m.States[key] = new LibraryEventMedia
                 {

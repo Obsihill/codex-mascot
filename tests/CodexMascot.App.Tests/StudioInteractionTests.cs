@@ -44,7 +44,16 @@ internal static class StudioInteractionTests
             check(!SameImage(Control<Image>("PreviewImage").Source, LibraryDashboard.LoadThumbnail(store.CoverPath(Second(), manager))), "individual scope displays state artwork rather than the cover");
             check(Control<WrapPanel>("StatePlaybackOptions").IsVisible && dashboard.FindName("SoundCheck") is null, "individual scope has playback and loop without sound checkbox");
             Click("StateSettingsButton");
-            check(!Control<WrapPanel>("StatePlaybackOptions").IsVisible && Control<Button>("ResetSettingsButton").IsVisible, "whole scope omits playback toggles and offers settings reset");
+            var settingsActions = Control<StackPanel>("SelectedSettingsActions");
+            var resetAction = Control<Button>("ResetSettingsButton");
+            var applyAction = Control<Button>("ApplySettingsButton");
+            check(!Control<WrapPanel>("StatePlaybackOptions").IsVisible && settingsActions.IsVisible &&
+                  ReferenceEquals(settingsActions.Children[0], resetAction) && ReferenceEquals(settingsActions.Children[1], applyAction) &&
+                  resetAction.Content?.ToString() == "" && applyAction.Content?.ToString() == "" &&
+                  Pencil.GetIcon(resetAction) == PencilIconKind.Reset && Pencil.GetIcon(applyAction) == PencilIconKind.Apply &&
+                  resetAction.ToolTip is ToolTip { Content: string resetTip } && resetTip.StartsWith("설정 초기화 ·") &&
+                  applyAction.ToolTip is ToolTip { Content: string applyTip } && applyTip.StartsWith("설정 적용 ·"),
+                "selected mascots show adjacent icon-only reset and apply controls with tooltips");
             check(SameImage(Control<Image>("PreviewImage").Source, LibraryDashboard.LoadThumbnail(store.CoverPath(Second(), manager))), "returning to whole scope restores the cover");
 
             var beforeDrag = store.Snapshot(); OverlayWindow? placement = null;
@@ -130,12 +139,61 @@ internal static class StudioInteractionTests
                 size.CommitValue(1.2);
             });
             check(CustomizationManager.States.All(s => Second().Settings(s).Scale == 1.2), "whole-scope size unifies mixed event sizes");
+            var installedTemplate = store.Library.Installed.Single(m => m.Id == "bot");
+            installedTemplate.Volume = .62; installedTemplate.Speed = 1.4; installedTemplate.Scale = .9;
+            installedTemplate.Position = "top-left"; installedTemplate.Loop = true;
+            installedTemplate.Events = new() { "running", "completed" };
+            foreach (var state in CustomizationManager.States)
+            {
+                var settings = installedTemplate.Settings(state);
+                settings.Volume = .62; settings.Speed = 1.4; settings.Scale = .9;
+                settings.Position = "top-left"; settings.Loop = true;
+                settings.HideBehindTaskbar = false; settings.HoldUntilClick = true;
+                settings.ImageDurationMs = 1750;
+            }
+            Second().For(MascotState.Completed).Sound = null;
+            Second().For(MascotState.Completed).Sounds.Clear();
             var beforeReset = store.Snapshot(); var cover = Second().CoverImage;
+            SettingsTransferTestHelpers.QueueResponse(check, "설정 초기화 확인", false);
             Click("ResetSettingsButton");
-            check(CustomizationManager.States.All(s => Second().Settings(s).Volume == 1 && Second().Settings(s).Speed == 1 && Second().Settings(s).Scale == 1 && Second().Settings(s).Position == "bottom-right" && !Second().Settings(s).Loop), "reset restores all state settings including size to defaults");
-            check(Second().CoverImage == cover && store.Library.Selected.Count == 2 && Control<TextBlock>("Feedback").Text.Contains("초기화"), "reset preserves media and selections and records history description");
+            check(store.Snapshot() == beforeReset, "cancelling reset leaves selected and installed settings unchanged");
+            SettingsTransferTestHelpers.QueueResponse(check, "설정 초기화 확인", true);
+            Click("ResetSettingsButton");
+            check(CustomizationManager.States.All(s => Second().Settings(s).Volume == .62 && Second().Settings(s).Speed == 1.4 &&
+                  Second().Settings(s).Scale == .9 && Second().Settings(s).Position == "top-left" && Second().Settings(s).Loop &&
+                  !Second().Settings(s).HideBehindTaskbar && Second().Settings(s).HoldUntilClick == true &&
+                  Second().Settings(s).ImageDurationMs == 1750) &&
+                  Second().Volume == .62 && Second().Speed == 1.4 && Second().Scale == .9 &&
+                  Second().Events.SequenceEqual(installedTemplate.Events),
+                "reset restores the installed mascot's actual overall and per-state settings, not app defaults");
+            check(Second().CoverImage == cover && Second().For(MascotState.Completed).SoundCandidates().Count == 0 &&
+                  installedTemplate.Settings(MascotState.Completed).Volume == .62 &&
+                  store.Library.Selected.Count == 2 && Control<TextBlock>("Feedback").Text.Contains("초기화"),
+                "reset preserves media, the installed original and other selections");
             dashboard.ReplayHistory(false);
             check(store.Snapshot() == beforeReset, "reset is fully reversible in one undo step");
+            var selectedBeforeApply = Second();
+            var templateBeforeApply = store.Library.Installed.Single(m => m.Id == "bot");
+            var otherVolume = store.Library.Find(firstId)!.Settings(MascotState.Completed).Volume;
+            var templateImage = templateBeforeApply.For(MascotState.Completed).Image;
+            var beforeApply = store.Snapshot();
+            SettingsTransferTestHelpers.QueueResponse(check, "설정 적용 확인", false);
+            Click("ApplySettingsButton");
+            check(store.Snapshot() == beforeApply, "cancelling apply leaves the installed template unchanged");
+            SettingsTransferTestHelpers.QueueResponse(check, "설정 적용 확인", true);
+            Click("ApplySettingsButton");
+            check(templateBeforeApply.Volume == selectedBeforeApply.Volume && templateBeforeApply.Speed == selectedBeforeApply.Speed &&
+                  templateBeforeApply.Scale == selectedBeforeApply.Scale && templateBeforeApply.Events.SequenceEqual(selectedBeforeApply.Events) &&
+                  CustomizationManager.States.All(s => templateBeforeApply.Settings(s).Volume == selectedBeforeApply.Settings(s).Volume &&
+                      templateBeforeApply.Settings(s).HideBehindTaskbar == selectedBeforeApply.Settings(s).HideBehindTaskbar) &&
+                  templateBeforeApply.For(MascotState.Completed).Image == templateImage &&
+                  templateBeforeApply.For(MascotState.Completed).SoundCandidates().Count > 0 &&
+                  store.Library.Find(firstId)!.Settings(MascotState.Completed).Volume == otherVolume,
+                "apply copies only settings to the installed template, preserving media and other selected copies");
+            check(new LibraryStore(file).Library.Installed.Single(m => m.Id == "bot").Settings(MascotState.Completed).Volume ==
+                  selectedBeforeApply.Settings(MascotState.Completed).Volume, "applied template settings survive restart");
+            dashboard.ReplayHistory(false);
+            check(store.Snapshot() == beforeApply, "apply is reversible in one undo step");
             dashboard.RemoveMascot(secondId);
             check(store.Library.Selected.Count == 1 && store.Library.Selected.Single().Id == firstId, "removing a duplicate removes only that exact instance");
             dashboard.ReplayHistory(false);
@@ -146,6 +204,60 @@ internal static class StudioInteractionTests
             if (!string.IsNullOrWhiteSpace(snapshotPath)) LibraryFeatureTests.Capture(dashboard, Path.ChangeExtension(snapshotPath, ".duplicates.png"));
         }
         finally { dashboard.Shutdown(); host.Close(); }
+
+        var editFile = Path.Combine(dir, "installed-edit.json");
+        var editStore = TestLibrary.Create(editFile);
+        var editDashboard = new LibraryDashboard(); editDashboard.Initialize(editStore, manager);
+        var editHost = new Window { Content = editDashboard, Width = 1220, Height = 900, ShowInTaskbar = false, ShowActivated = false };
+        try
+        {
+            editHost.Show(); Pump();
+            editDashboard.AddMascot("bot");
+            var selected = editStore.Library.Selected.Single(m => m.SourceId == "bot");
+            selected.Settings(MascotState.Completed).Volume = .37;
+            var editButton = (Button)editDashboard.FindName("EditMascotButton");
+            check(editButton.Visibility == Visibility.Collapsed, "installed-package editing is hidden for independently configured selected copies");
+            var installedList = (ListBox)editDashboard.FindName("InstalledList");
+            installedList.SelectedItem = installedList.Items.Cast<object>().Single(c =>
+                ((LibraryMascot)c.GetType().GetProperty("Mascot")!.GetValue(c)!).Id == "bot");
+            editHost.UpdateLayout();
+            var resetButton = (Button)editDashboard.FindName("ResetSettingsButton");
+            var testButton = (Button)editDashboard.FindName("TestButton");
+            check(resetButton.Visibility == Visibility.Collapsed &&
+                  ((Button)editDashboard.FindName("ApplySettingsButton")).Visibility == Visibility.Collapsed &&
+                  editButton.Visibility == Visibility.Visible &&
+                  editButton.Content.ToString() == "마스코트 수정" &&
+                  editButton.TranslatePoint(new Point(), testButton).Y >= testButton.ActualHeight,
+                "installed mascots hide Reset settings and show Edit mascot below Test");
+            var beforeHiddenReset = editStore.Snapshot();
+            resetButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            check(editStore.Snapshot() == beforeHiddenReset, "installed mascots cannot reset settings through a hidden button event");
+            Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() =>
+            {
+                var editor = Application.Current.Windows.OfType<MascotPackageEditor>().Single(w => w.IsVisible);
+                check(editor.Title == "마스코트 수정" && editStore.Library.Installed.Single(m => m.Id == "bot").Name == "민트 봇",
+                    "edit button opens the installed mascot's media editor without saving on entry");
+                editor.Close();
+            }));
+            editButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var original = editStore.Library.Installed.Single(m => m.Id == "bot");
+            var beforeEdit = editStore.Snapshot();
+            var media = CustomizationManager.States.ToDictionary(MascotConfiguration.StateKey, s => original.For(s).Image);
+            media["cover"] = original.CoverImage;
+            media["completed"] = original.For(MascotState.Failed).Image;
+            var replacement = MascotPackageEditor.BuildPackage("Renamed bot", media, new HashSet<string> { "completed" }, manager, original);
+            check(editStore.Snapshot() == beforeEdit && replacement.Id == original.Id && replacement.InstalledAt == original.InstalledAt,
+                "preparing an edit leaves the installed package unchanged and preserves its identity");
+            check(editDashboard.UpdateInstalledMascot(replacement) && selected.Name == "Renamed bot" &&
+                  selected.For(MascotState.Completed).Image == replacement.For(MascotState.Completed).Image &&
+                  selected.Settings(MascotState.Completed).Volume == .37 && editStore.Library.Installed.Single(m => m.Id == "bot").Name == "Renamed bot",
+                "editing installed media updates selected copies without resetting their playback settings");
+            var reloadedEdit = new LibraryStore(editFile);
+            check(reloadedEdit.Library.Installed.Single(m => m.Id == "bot").Name == "Renamed bot" &&
+                  reloadedEdit.Library.Selected.Single(m => m.SourceId == "bot").Settings(MascotState.Completed).Volume == .37,
+                "installed edits and selected-instance settings survive restart");
+        }
+        finally { editDashboard.Shutdown(); editHost.Close(); }
 
         var legacyFile = Path.Combine(dir, "muted-duplicates.json");
         File.WriteAllText(legacyFile, """{"installed":[{"id":"bot","media":"builtin:bot","volume":0.8,"states":{"completed":{"image":"builtin:bot/completed","soundEnabled":false}}}],"selectedIds":["bot","bot"]}""");

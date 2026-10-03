@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Text.Json;
 using CodexMascot.Core;
 
 namespace CodexMascot.App;
@@ -23,7 +24,7 @@ internal sealed class MascotPackageEditor : Window
     {
         _manager = manager; _original = original;
         FontFamily = PencilFonts.Handwriting; FontSize = 20;
-        Title = original is null ? Loc.T("마스코트 등록") : Loc.T("미디어 구성");
+        Title = original is null ? Loc.T("마스코트 등록") : Loc.T("마스코트 수정");
         Width = 520; SizeToContent = SizeToContent.Height; MaxHeight = SystemParameters.WorkArea.Height - 40;
         ResizeMode = ResizeMode.NoResize; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = PencilPalette.Paper; Foreground = PencilPalette.Ink;
@@ -106,12 +107,19 @@ internal sealed class MascotPackageEditor : Window
     private void AddSlot(StackPanel panel, string key, string label, string? path)
     {
         _paths[key] = path;
-        var row = new Grid { Margin = new Thickness(0, 0, 0, 10) };
-        row.ColumnDefinitions.Add(new() { Width = new GridLength(62) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        var image = new Image { Height = 54, Width = 54, Stretch = Stretch.Uniform };
+        var row = new Grid { Margin = new Thickness(0, 0, 0, 2) };
+        row.ColumnDefinitions.Add(new() { Width = new GridLength(42) }); row.ColumnDefinitions.Add(new());
+        row.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        var image = new Image { Height = 34, Width = 34, Stretch = Stretch.Uniform };
         var box = new PencilBorder { Background = PencilPalette.Inset, Child = image }; row.Children.Add(box);
         var caption = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 8, 0) }; Grid.SetColumn(caption, 1); row.Children.Add(caption);
-        var pick = new Button { Content = key == "cover" ? Loc.T("이미지") : Loc.T("이미지 / 영상"), VerticalAlignment = VerticalAlignment.Center }; Grid.SetColumn(pick, 2); row.Children.Add(pick);
+        var pick = new Button { Content = key == "cover" ? Loc.T("이미지") : Loc.T("이미지 / 영상"),
+            Padding = new Thickness(8, 3, 8, 3), VerticalAlignment = VerticalAlignment.Center }; Grid.SetColumn(pick, 2); row.Children.Add(pick);
+        var clear = new Button { Content = "", ToolTip = Loc.T("제거"), Width = 30,
+            Padding = new Thickness(4, 3, 4, 3), Margin = new Thickness(5, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        Pencil.SetIcon(clear, PencilIconKind.Remove);
+        System.Windows.Automation.AutomationProperties.SetName(clear, label + " " + Loc.T("제거"));
+        Grid.SetColumn(clear, 3); row.Children.Add(clear);
         void Refresh()
         {
             var value = _paths[key];
@@ -134,14 +142,15 @@ internal sealed class MascotPackageEditor : Window
             }
             catch (Exception ex) { _error.Text = ex.Message; }
         };
+        clear.Click += (_, _) => { _paths[key] = null; _changed.Add(key); Refresh(); _error.Text = ""; };
         panel.Children.Add(row);
     }
     private void AddSoundSlot(StackPanel panel, string key, string[] paths)
     {
         _soundChoices[key] = paths;
-        var row = new DockPanel { Margin = new Thickness(62, 0, 0, 16) };
-        var pick = new Button { Content = Loc.T("소리"), Name = key.Replace(".", "_") + "Pick" };
-        var clear = new Button { Content = Loc.T("제거") };
+        var row = new DockPanel { Margin = new Thickness(42, 0, 0, 6) };
+        var pick = new Button { Content = Loc.T("소리 추가"), Name = key.Replace(".", "_") + "Pick", Padding = new Thickness(8, 3, 8, 3) };
+        var clear = new Button { Content = Loc.T("제거"), Padding = new Thickness(8, 3, 8, 3) };
         Pencil.SetIcon(pick, PencilIconKind.Volume); Pencil.SetIcon(clear, PencilIconKind.Remove);
         DockPanel.SetDock(clear, Dock.Right); row.Children.Add(clear);
         DockPanel.SetDock(pick, Dock.Right); row.Children.Add(pick);
@@ -157,11 +166,17 @@ internal sealed class MascotPackageEditor : Window
         {
             var dialog = new Microsoft.Win32.OpenFileDialog { Title = Loc.T("소리 선택 — 여러 개 선택 시 랜덤 재생"), Filter = Loc.T("소리|*.wav;*.mp3"), Multiselect = true };
             if (dialog.ShowDialog(this) != true) return;
-            try { foreach (var path in dialog.FileNames) ValidateSound(path); _soundChoices[key] = dialog.FileNames; _changed.Add(key); Refresh(); _error.Text = ""; }
+            try { _soundChoices[key] = AppendSoundChoices(_soundChoices[key], dialog.FileNames); _changed.Add(key); Refresh(); _error.Text = ""; }
             catch (Exception ex) { _error.Text = ex.Message; }
         };
         clear.Click += (_, _) => { _soundChoices[key] = Array.Empty<string>(); _changed.Add(key); Refresh(); };
         Refresh(); panel.Children.Add(row);
+    }
+    internal static string[] AppendSoundChoices(IEnumerable<string> current, IEnumerable<string> added)
+    {
+        var selected = added.ToArray();
+        foreach (var path in selected) ValidateSound(path);
+        return current.Concat(selected).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
     internal static LibraryMascot BuildPackage(string name, IReadOnlyDictionary<string, string?> paths, IReadOnlySet<string> changed,
         CustomizationManager manager, LibraryMascot? original = null, IReadOnlyDictionary<string, string[]>? soundChoices = null)
@@ -171,7 +186,7 @@ internal sealed class MascotPackageEditor : Window
         // Validate the whole package before copying any file. Cancelling never imports assets.
         foreach (var key in keys)
         {
-            if (!paths.TryGetValue(key, out var path) || string.IsNullOrWhiteSpace(path)) throw new InvalidOperationException(Loc.T("대표 이미지와 모든 상태 이미지를 선택하세요."));
+            if (!paths.TryGetValue(key, out var path) || string.IsNullOrWhiteSpace(path)) continue;
             if (path.StartsWith("builtin:", StringComparison.Ordinal)) continue;
             ValidateMedia(manager.ResolveAsset(path) ?? path, key == "cover");
         }
@@ -185,20 +200,21 @@ internal sealed class MascotPackageEditor : Window
             selectedSounds[key] = sounds.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             foreach (var sound in selectedSounds[key]) ValidateSound(manager.ResolveAsset(sound) ?? sound);
         }
-        var result = new LibraryMascot { Name = name.Trim(), InstalledAt = DateTimeOffset.UtcNow };
+        var result = original is null ? new LibraryMascot { InstalledAt = DateTimeOffset.UtcNow } :
+            JsonSerializer.Deserialize<LibraryMascot>(JsonSerializer.Serialize(original))!;
+        result.Name = name.Trim();
         foreach (var key in keys)
         {
-            var path = paths[key]!;
+            var path = paths.GetValueOrDefault(key);
             if (key == "cover") { result.CoverImage = path; continue; }
-            var old = original?.States.GetValueOrDefault(key);
-            result.States[key] = new LibraryEventMedia { Image = path, SoundEnabled = old?.SoundEnabled ?? true,
-                Sounds = selectedSounds[key + ".sound"].ToList(),
-                Playback = old?.Playback,
-                SpriteColumns = changed.Contains(key) ? 1 : old?.SpriteColumns ?? 1,
-                SpriteRows = changed.Contains(key) ? 1 : old?.SpriteRows ?? 1,
-                FrameDurationMs = old?.FrameDurationMs ?? 100 };
+            var media = result.States.GetValueOrDefault(key) ?? new LibraryEventMedia();
+            media.Image = path; media.Sound = null; media.Sounds = selectedSounds[key + ".sound"].ToList();
+            if (changed.Contains(key)) { media.SpriteColumns = 1; media.SpriteRows = 1; }
+            result.States[key] = media;
         }
-        return new MascotFolderLibrary(AppPaths.LibraryDirectory).SavePackage(result);
+        // Edits are copied by LibraryHistory.Commit, so a cancelled or failed
+        // edit cannot change the installed package before the library update.
+        return original is null ? new MascotFolderLibrary(AppPaths.LibraryDirectory).SavePackage(result) : result;
     }
     internal static void ValidateMedia(string path, bool cover)
     {

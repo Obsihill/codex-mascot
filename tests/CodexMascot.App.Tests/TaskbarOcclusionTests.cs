@@ -15,7 +15,7 @@ internal static class TaskbarOcclusionTests
         try
         {
             host.Show(); host.UpdateLayout();
-            var list = (ListBox)dashboard.FindName("InstalledList"); list.SelectedIndex = 0;
+            var list = (ListBox)dashboard.FindName("SelectedList"); list.SelectedIndex = 0;
             var card = list.SelectedItem;
             var id = ((LibraryMascot)card.GetType().GetProperty("Mascot")!.GetValue(card)!).Id;
             LibraryMascot Mascot() => store.Library.Find(id)!;
@@ -53,6 +53,7 @@ internal static class TaskbarOcclusionTests
             check(toggle.IsChecked == false && CustomizationManager.States.All(s => !Mascot().Settings(s).HideBehindTaskbar), "redo restores whole-scope change");
             var saved = new LibraryStore(file).Library.Find(id)!;
             check(CustomizationManager.States.All(s => !saved.Settings(s).HideBehindTaskbar), "taskbar preference persists on reload");
+            SettingsTransferTestHelpers.QueueResponse(check, "설정 초기화 확인", true);
             ((Button)dashboard.FindName("ResetSettingsButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             check(toggle.IsChecked == true, "reset restores default taskbar occlusion");
         }

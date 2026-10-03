@@ -24,7 +24,8 @@ public sealed class MascotLibrary
 
     public LibraryMascot? Find(string id) => Installed.Concat(Selected).FirstOrDefault(m => m.Id == id);
     public IReadOnlyList<LibraryMascot> Eligible(MascotState state) => Selected
-        .Where(m => m.Events.Contains(MascotConfiguration.StateKey(state))).ToArray();
+        .Where(m => m.Events.Contains(MascotConfiguration.StateKey(state)) &&
+                    !string.IsNullOrWhiteSpace(m.States.GetValueOrDefault(MascotConfiguration.StateKey(state))?.Image)).ToArray();
 }
 
 public sealed class LibraryMascot

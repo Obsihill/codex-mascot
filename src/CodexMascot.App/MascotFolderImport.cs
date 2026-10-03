@@ -33,11 +33,11 @@ internal static class MascotFolderImport
         if (string.IsNullOrWhiteSpace(mascot.Name) || mascot.Name.Length > 200) throw new InvalidDataException(Loc.T("마스코트 이름은 1~200자로 입력해야 합니다."));
         mascot.Name = mascot.Name.Trim(); mascot.Id = Guid.NewGuid().ToString("N");
         mascot.SourceId = null; mascot.Media = null; mascot.InstalledAt = DateTimeOffset.UtcNow;
-        mascot.CoverImage = ResolveMedia(root, mascot.CoverImage, Loc.T("대표 이미지"), true);
+        mascot.CoverImage = string.IsNullOrWhiteSpace(mascot.CoverImage) ? null : ResolveMedia(root, mascot.CoverImage, Loc.T("대표 이미지"), true);
         var keys = CustomizationManager.States.Select(MascotConfiguration.StateKey).ToHashSet(StringComparer.Ordinal);
-        if (mascot.States is null || keys.Any(key => !mascot.States.TryGetValue(key, out var entry) || entry is null))
-            throw new InvalidDataException(Loc.T("6개 상태의 이미지·영상 정보가 모두 필요합니다."));
-        mascot.States = mascot.States.Where(p => keys.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value);
+        mascot.States = (mascot.States ?? new()).Where(p => keys.Contains(p.Key) && p.Value is not null)
+            .ToDictionary(p => p.Key, p => p.Value);
+        foreach (var key in keys) mascot.States.TryAdd(key, new LibraryEventMedia());
         mascot.Events = (mascot.Events ?? new()).Where(keys.Contains).Distinct().ToList();
         mascot.Volume = Clamp(mascot.Volume, 0, 2, 1); mascot.Speed = Clamp(mascot.Speed, .25, 3, 1);
         mascot.Scale = mascot.Scale is { } scale ? Clamp(scale, .4, 3, 1) : null;
@@ -45,7 +45,7 @@ internal static class MascotFolderImport
         foreach (var state in CustomizationManager.States)
         {
             var media = mascot.For(state);
-            media.Image = ResolveMedia(root, media.Image, MainWindow.StateName(state), false);
+            media.Image = string.IsNullOrWhiteSpace(media.Image) ? null : ResolveMedia(root, media.Image, MainWindow.StateName(state), false);
             if (!string.IsNullOrWhiteSpace(media.Sound)) media.Sound = ResolveMedia(root, media.Sound, MainWindow.StateName(state) + Loc.T(" 소리"), false, true);
             else media.Sound = null;
             media.Sounds = (media.Sounds ?? new()).Select(s => ResolveMedia(root, s, MainWindow.StateName(state) + Loc.T(" 소리"), false, true)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();

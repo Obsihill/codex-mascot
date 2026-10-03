@@ -5,7 +5,7 @@ using System.Windows.Media;
 
 namespace CodexMascot.App;
 
-public enum PencilIconKind { None, Volume, Speed, Play, Stop, Settings, Duration, Position, Loop, Add, Remove, Delete, Reset, Back, Folder, ChevronDown, Minimize, Maximize, Restore, Close, MonitorAll, ExcludeAll }
+public enum PencilIconKind { None, Volume, Speed, Play, Stop, Settings, Duration, Position, Loop, Add, Remove, Delete, Reset, Back, Folder, ChevronDown, Minimize, Maximize, Restore, Close, MonitorAll, ExcludeAll, Edit, Apply }
 
 public static class PencilFonts
 {
@@ -123,6 +123,8 @@ internal static class PencilGeometry
             PencilIconKind.ExcludeAll => "M4,5 L28,5 28,27 4,27 Z M9,16 L23,16",
             PencilIconKind.Delete => "M8,10 L9,28 24,28 25,10 M5,9 L28,9 M12,8 L12,4 21,4 21,8 M14,14 L14,24 M20,14 L20,24",
             PencilIconKind.Reset => "M7,8 C15,-1 30,7 28,20 C27,32 8,33 4,21 M7,3 L7,10 14,10",
+            PencilIconKind.Edit => "M5,23 L4,28 9,27 26,10 22,6 Z M19,9 L23,13 M4,28 L28,28",
+            PencilIconKind.Apply => "M4,16 L12,24 28,7",
             PencilIconKind.Back => "M27,16 L5,16 M13,8 L5,16 13,24",
             PencilIconKind.Folder => "M3,9 L3,26 29,26 29,10 17,10 14,6 3,6 Z",
             PencilIconKind.ChevronDown => "M8,12 L16,20 24,12",
