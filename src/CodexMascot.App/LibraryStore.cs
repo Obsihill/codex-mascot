@@ -24,7 +24,7 @@ public sealed class LibraryStore
         }
         catch (Exception e) when (e is IOException or JsonException)
         {
-            Warning = "라이브러리를 읽지 못해 기본 목록을 불러왔습니다. " + e.Message;
+            Warning = Loc.T("라이브러리를 읽지 못해 기본 목록을 불러왔습니다. ") + e.Message;
             if (File.Exists(_path)) File.Copy(_path, _path + ".backup-" + DateTime.Now.ToString("yyyyMMddHHmmssfff"));
         }
         Library ??= initialLibrary ?? CreateDefault(global ?? new());
@@ -46,12 +46,14 @@ public sealed class LibraryStore
             // The built-in samples and the original mascot have separate assets per state.
             var legacy = configuration ?? new MascotConfiguration();
             var builtin = m.Media?.StartsWith("builtin:", StringComparison.Ordinal) == true ? m.Media : null;
-            m.CoverImage ??= builtin is not null ? builtin + "/cover" :
-                m.Media is not null && !MascotMedia.IsVideo(m.Media) ? m.Media : legacy.For(MascotState.Idle).Image;
+            if (Library.FolderLayoutVersion < 1)
+                m.CoverImage ??= builtin is not null ? builtin + "/cover" :
+                    m.Media is not null && !MascotMedia.IsVideo(m.Media) ? m.Media : legacy.For(MascotState.Idle).Image;
             foreach (var state in CustomizationManager.States)
             {
                 var key = MascotConfiguration.StateKey(state);
-                if (m.States.TryGetValue(key, out var entry) && entry?.Image is not null) continue;
+                if (m.States.TryGetValue(key, out var entry) && entry is not null &&
+                    (entry.Image is not null || Library.FolderLayoutVersion >= 1)) continue;
                 var original = legacy.For(state);
                 m.States[key] = new LibraryEventMedia
                 {
@@ -96,7 +98,7 @@ public sealed class LibraryStore
                 Save();
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-            { Warning = (Warning is null ? "" : Warning + "\n") + "폴더 라이브러리 전환을 완료하지 못했습니다. 기존 목록을 사용합니다. " + e.Message; }
+            { Warning = (Warning is null ? "" : Warning + "\n") + Loc.T("폴더 라이브러리 전환을 완료하지 못했습니다. 기존 목록을 사용합니다. ") + e.Message; }
         }
     }
     public void Save()
@@ -123,7 +125,7 @@ public sealed class LibraryStore
     {
         var library = new MascotLibrary { AudioLayoutVersion = 1 };
         var installedAt = DateTimeOffset.UtcNow;
-        library.Installed.Add(new() { Id = "original", Name = "기존 마스코트", InstalledAt = installedAt, Position = g.Position, MonitorDevice = g.MonitorDevice,
+        library.Installed.Add(new() { Id = "original", Name = Loc.T("기존 마스코트"), InstalledAt = installedAt, Position = g.Position, MonitorDevice = g.MonitorDevice,
             CustomLeft = g.CustomLeft, CustomTop = g.CustomTop, CoverImage = "assets/images/main.png", States = ImageStates("assets/images"),
             Events = new() { "idle", "running", "needsAttention", "completed", "failed", "interrupted" } });
         library.Installed.Add(new() { Id = "mascat", Name = "MasCat", InstalledAt = installedAt,
@@ -153,6 +155,7 @@ public sealed class LibraryStore
     {
         Scale = placement.Scale ?? global.Scale, Position = placement.Position, MonitorDevice = placement.MonitorDevice,
         CustomLeft = placement.CustomLeft, CustomTop = placement.CustomTop, AlwaysOnTop = global.AlwaysOnTop,
+        HideBehindTaskbar = placement.HideBehindTaskbar,
         ClickThrough = false, KeepCompletedVisibleUntilClick = global.KeepCompletedVisibleUntilClick,
         BringCodexToFrontOnClick = global.BringCodexToFrontOnClick, SoundEnabled = true,
         MasterVolume = 1, ShowIdle = global.ShowIdle

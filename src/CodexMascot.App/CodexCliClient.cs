@@ -29,7 +29,7 @@ public sealed class CodexCliClient : ICodexClient
         foreach (var arg in new[] { "-a", "never", "exec", "--json", "--sandbox", ReadOnly ? "read-only" : "workspace-write" }) info.ArgumentList.Add(arg);
         if (!string.IsNullOrWhiteSpace(model)) { info.ArgumentList.Add("--model"); info.ArgumentList.Add(model); }
         info.ArgumentList.Add("-");
-        var process = Process.Start(info) ?? throw new IOException("CLI 시작 실패");
+        var process = Process.Start(info) ?? throw new IOException(Loc.T("CLI 시작 실패"));
         _process = process;
         await process.StandardInput.WriteLineAsync(prompt.AsMemory(), cancellationToken);
         process.StandardInput.Close();
@@ -54,13 +54,13 @@ public sealed class CodexCliClient : ICodexClient
             var error = await stderr;
             if (!completed) EventReceived?.Invoke(this, new(CodexEventKind.TurnCompleted, "CLI JSON", _id, _turn,
                 Status: _stopping ? "interrupted" : "failed",
-                Message: _stopping ? "사용자가 CLI를 중단함" : "종료 이벤트 없이 CLI 종료: " + error[..Math.Min(error.Length, 300)]) { ProjectPath = dir });
+                Message: _stopping ? Loc.T("사용자가 CLI를 중단함") : Loc.T("종료 이벤트 없이 CLI 종료: ") + error[..Math.Min(error.Length, 300)]) { ProjectPath = dir });
         }
         catch (Exception e) { EventReceived?.Invoke(this, new(CodexEventKind.Warning, "CLI JSON", _id, Message: e.Message)); }
     }
     public Task InterruptAsync(string threadId, string turnId, CancellationToken cancellationToken = default) => StopAsync();
     public Task ApproveAsync(string requestId, bool accept, CancellationToken cancellationToken = default)
-        => Task.FromException(new NotSupportedException("CLI 모드는 승인 대화 없이 지정한 샌드박스 안에서만 실행됩니다."));
+        => Task.FromException(new NotSupportedException(Loc.T("CLI 모드는 승인 대화 없이 지정한 샌드박스 안에서만 실행됩니다.")));
     public async Task StopAsync()
     {
         var p = _process;

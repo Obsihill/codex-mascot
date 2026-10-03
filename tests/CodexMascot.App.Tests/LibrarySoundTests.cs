@@ -74,6 +74,11 @@ internal static class LibrarySoundTests
         foreach (var state in CustomizationManager.States) paths[MascotConfiguration.StateKey(state) + ".sound"] = bot.For(state).Sound;
         var built = MascotPackageEditor.BuildPackage("소리 테스트", paths, new HashSet<string>(), manager);
         check(built.States.Values.All(s => s.SoundCandidates().Count == 1 && manager.ResolveAsset(s.SoundCandidates()[0]) is not null), "direct registration includes all selected sounds in owned package");
+        var appended = MascotPackageEditor.AppendSoundChoices(new[] { manager.ResolveAsset(bot.For(MascotState.Completed).Sound)! },
+            new[] { manager.ResolveAsset(bot.For(MascotState.Failed).Sound)!, manager.ResolveAsset(bot.For(MascotState.Completed).Sound)! });
+        check(appended.Length == 2 && appended[0] == manager.ResolveAsset(bot.For(MascotState.Completed).Sound) &&
+              appended[1] == manager.ResolveAsset(bot.For(MascotState.Failed).Sound),
+            "adding sounds keeps prior choices and ignores duplicates");
         var editor = new MascotPackageEditor(manager, null) { ShowActivated = false, ShowInTaskbar = false };
         try
         {
@@ -81,6 +86,13 @@ internal static class LibrarySoundTests
             tabs.SelectedIndex = 1; editor.Show(); editor.UpdateLayout();
             var panel = (StackPanel)((TabItem)tabs.Items[1]).Content;
             check(panel.Children.OfType<DockPanel>().SelectMany(p => p.Children.OfType<Button>()).Count(b => b.Name.EndsWith("_soundPick")) == 6, "direct registration offers one sound picker per state");
+            var mediaRows = panel.Children.OfType<Grid>().ToArray();
+            var soundRows = panel.Children.OfType<DockPanel>().ToArray();
+            check(mediaRows.All(g => g.ActualHeight <= 48 && g.Margin.Bottom <= 2) &&
+                  soundRows.All(d => d.ActualHeight <= 40 && d.Margin.Bottom <= 6) &&
+                  mediaRows.All(g => g.Children.OfType<Button>().Any(b => Pencil.GetIcon(b) == PencilIconKind.Remove)),
+                "media and sound picker controls use compact actual heights and spacing: " +
+                string.Join(",", mediaRows.Select(g => g.ActualHeight)) + " / " + string.Join(",", soundRows.Select(d => d.ActualHeight)));
             var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
             if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(editor, Path.ChangeExtension(screenshot, ".registration-sounds.png"));
         }

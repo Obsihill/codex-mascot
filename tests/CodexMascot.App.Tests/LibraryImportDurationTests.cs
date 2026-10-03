@@ -47,7 +47,12 @@ internal static class LibraryImportDurationTests
         Reject(n => n["version"] = "1", "incorrect manifest value types rejected");
         Reject(n => n["format"] = "unrelated", "unrelated JSON is not a mascot package");
         Reject(n => n["mascot"]!["name"] = "", "empty imported name rejected");
-        Reject(n => n["mascot"]!["states"]!.AsObject().Remove("failed"), "incomplete state sets rejected");
+        var withoutState = JsonNode.Parse(original)!.AsObject();
+        withoutState["mascot"]!["states"]!.AsObject().Remove("failed");
+        File.WriteAllText(manifest, withoutState.ToJsonString());
+        check(MascotFolderImport.Read(folder).For(MascotState.Failed).Image is null,
+            "missing state media imports as an empty state");
+        File.WriteAllText(manifest, original);
         Reject(n => n["mascot"]!["coverImage"] = "../outside.png", "parent-directory traversal rejected");
         Reject(n => n["mascot"]!["coverImage"] = ".. /outside.png", "Windows trailing-space traversal aliases rejected");
         Reject(n => n["mascot"]!["coverImage"] = first.CoverImage, "absolute media paths rejected");
@@ -156,6 +161,11 @@ internal static class LibraryImportDurationTests
             Pump(650); check(!dashboard.IsTesting, "image test stops automatically at the configured duration and resets its button");
             duration.CommitValue(7500);
             check(MascotPresentationGroup.CompletionVisibleMilliseconds(store, manager) == 7500, "foreground acknowledgment honors the longest selected image duration");
+            Mascot().Settings(MascotState.NeedsAttention).ImageDurationMs = 6200;
+            check(MascotPresentationGroup.NotificationVisibleMilliseconds(store, manager, MascotState.NeedsAttention) == 6200, "question notification uses its own image duration");
+            var questionTime = DateTimeOffset.UtcNow;
+            check(!MainWindow.ShouldDismissForForeground(MascotState.NeedsAttention, true, questionTime, questionTime.AddMilliseconds(6200)), "foreground Codex does not instantly dismiss question");
+            check(MainWindow.ShouldDismissForForeground(MascotState.NeedsAttention, true, questionTime.AddMilliseconds(6200), questionTime.AddMilliseconds(6200)), "foreground Codex dismisses question after visible duration");
             Capture(dashboard, "duration");
             var video = Environment.GetEnvironmentVariable("MASCOT_VIDEO_TEST_FILE");
             if (!string.IsNullOrWhiteSpace(video))
@@ -170,6 +180,7 @@ internal static class LibraryImportDurationTests
             }
             check(new LibraryStore(file).Library.Find(id)!.Settings(MascotState.Running).ImageDurationMs is not null, "duration survives reload and independent selected settings");
             if (states.IsVisible) Click("StateSettingsButton");
+            SettingsTransferTestHelpers.QueueResponse(check, "설정 초기화 확인", true);
             Click("ResetSettingsButton");
             check(CustomizationManager.States.All(s => Mascot().Settings(s).ImageDurationMs is null), "reset restores legacy/default event timing");
             dashboard.ReplayHistory(false);

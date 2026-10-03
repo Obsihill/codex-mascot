@@ -6,7 +6,7 @@
  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
  mc:Ignorable="d" d:DesignWidth="1220" d:DesignHeight="860"
  d:DataContext="{d:DesignInstance Type=local:LibraryDashboardDesignData, IsDesignTimeCreatable=True}"
- Background="{x:Static local:PencilPalette.Paper}" Foreground="{x:Static local:PencilPalette.Ink}" FontFamily="{x:Static local:PencilFonts.Handwriting}" FontSize="20" PreviewKeyDown="History_OnKeyDown">
+ Background="{Binding Paper, Source={x:Static local:PencilPalette.Current}}" Foreground="{Binding Ink, Source={x:Static local:PencilPalette.Current}}" FontFamily="{x:Static local:PencilFonts.Handwriting}" FontSize="20" PreviewKeyDown="History_OnKeyDown">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -29,22 +29,22 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ListBoxItem">
-                            <local:PencilBorder x:Name="Card" Background="{x:Static local:PencilPalette.Surface}" BorderBrush="{x:Static local:PencilPalette.Line}" BorderThickness="1" CornerRadius="12" Padding="10">
+                            <local:PencilBorder x:Name="Card" Background="{Binding Surface, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding Line, Source={x:Static local:PencilPalette.Current}}" BorderThickness="1" CornerRadius="12" Padding="10">
                                 <ContentPresenter/>
                             </local:PencilBorder>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsSelected" Value="True">
-                                    <Setter TargetName="Card" Property="BorderBrush" Value="{x:Static local:PencilPalette.Accent}"/>
+                                    <Setter TargetName="Card" Property="BorderBrush" Value="{Binding Accent, Source={x:Static local:PencilPalette.Current}}"/>
                                 </Trigger>
                                 <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                    <Setter TargetName="Card" Property="BorderBrush" Value="{x:Static local:PencilPalette.Accent}"/>
+                                    <Setter TargetName="Card" Property="BorderBrush" Value="{Binding Accent, Source={x:Static local:PencilPalette.Current}}"/>
                                 </Trigger>
                                 <MultiTrigger>
                                     <MultiTrigger.Conditions>
                                         <Condition Property="IsMouseOver" Value="True"/>
                                         <Condition Property="IsEnabled" Value="True"/>
                                     </MultiTrigger.Conditions>
-                                    <Setter TargetName="Card" Property="BorderBrush" Value="{x:Static local:PencilPalette.Emphasis}"/>
+                                    <Setter TargetName="Card" Property="BorderBrush" Value="{Binding Emphasis, Source={x:Static local:PencilPalette.Current}}"/>
                                 </MultiTrigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -54,8 +54,8 @@
             <Style x:Key="CardBody" TargetType="local:PencilBorder">
                 <Setter Property="Width" Value="126"/>
                 <Setter Property="Height" Value="126"/>
-                <Setter Property="Background" Value="{x:Static local:PencilPalette.Inset}"/>
-                <Setter Property="BorderBrush" Value="{x:Static local:PencilPalette.Line}"/>
+                <Setter Property="Background" Value="{Binding Inset, Source={x:Static local:PencilPalette.Current}}"/>
+                <Setter Property="BorderBrush" Value="{Binding Line, Source={x:Static local:PencilPalette.Current}}"/>
                 <Setter Property="BorderThickness" Value="1"/>
             </Style>
             <!-- 이름 배경 박스: Margin=위치, Height/Width=크기, Background 앞 두 자리=불투명도.
@@ -66,7 +66,7 @@
                 <Setter Property="Margin" Value="5,0,5,7"/>
                 <Setter Property="Height" Value="30"/>
                 <Setter Property="Width" Value="Auto"/>
-                <Setter Property="Background" Value="#BFFFFFFF"/>
+                <Setter Property="Background" Value="{Binding Badge, Source={x:Static local:PencilPalette.Current}}"/>
                 <Setter Property="Panel.ZIndex" Value="1"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
@@ -131,7 +131,7 @@
                         <Border x:Name="CardCaptionBackground" Style="{StaticResource CardCaptionBackground}">
                             <TextBlock x:Name="CardCaption" Style="{StaticResource CardCaption}" Text="{Binding Name}" ToolTip="{Binding Name}"/>
                         </Border>
-                        <Button x:Name="CardAddButton" Panel.ZIndex="2" Style="{StaticResource CardAction}" Content="" local:Pencil.Icon="Add" Foreground="{x:Static local:PencilPalette.Accent}" ToolTip="추가" AutomationProperties.Name="{Binding Name, StringFormat={}{0} 추가}" Click="CardAdd_OnClick"/>
+                        <Button x:Name="CardAddButton" Panel.ZIndex="2" Style="{StaticResource CardAction}" Content="" local:Pencil.Icon="Add" Foreground="{Binding Accent, Source={x:Static local:PencilPalette.Current}}" ToolTip="{local:Loc Key=LB73ACCCA8A4A}" AutomationProperties.Name="{Binding Name, StringFormat={local:Loc Key=L47E781C43156}}" Click="CardAdd_OnClick"/>
                     </Grid>
                 </local:PencilBorder>
             </DataTemplate>
@@ -142,7 +142,7 @@
                         <Border x:Name="CardCaptionBackground" Style="{StaticResource CardCaptionBackground}">
                             <TextBlock x:Name="CardCaption" Style="{StaticResource CardCaption}" Text="{Binding Name}" ToolTip="{Binding Name}"/>
                         </Border>
-                        <Button x:Name="CardRemoveButton" Panel.ZIndex="2" Style="{StaticResource CardAction}" Content="" local:Pencil.Icon="Remove" Foreground="{x:Static local:PencilPalette.Danger}" ToolTip="선택 해제" AutomationProperties.Name="{Binding Name, StringFormat={}{0} 선택 해제}" Click="CardRemove_OnClick"/>
+                        <Button x:Name="CardRemoveButton" Panel.ZIndex="2" Style="{StaticResource CardAction}" Content="" local:Pencil.Icon="Remove" Foreground="{Binding Danger, Source={x:Static local:PencilPalette.Current}}" ToolTip="{local:Loc Key=L9AC3A0BEBB2F}" AutomationProperties.Name="{Binding Name, StringFormat={local:Loc Key=LB61B4A6DCFF5}}" Click="CardRemove_OnClick"/>
                     </Grid>
                 </local:PencilBorder>
             </DataTemplate>
@@ -169,24 +169,24 @@
                     <GridSplitter.Template>
                         <ControlTemplate TargetType="GridSplitter">
                             <Grid Background="Transparent">
-                                <local:PencilBorder x:Name="Grip" Width="40" Height="3" BorderBrush="{x:Static local:PencilPalette.Line}" BorderThickness="1" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                <local:PencilBorder x:Name="Grip" Width="40" Height="3" BorderBrush="{Binding Line, Source={x:Static local:PencilPalette.Current}}" BorderThickness="1" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsKeyboardFocused" Value="True">
-                                    <Setter TargetName="Grip" Property="BorderBrush" Value="{x:Static local:PencilPalette.Accent}"/>
+                                    <Setter TargetName="Grip" Property="BorderBrush" Value="{Binding Accent, Source={x:Static local:PencilPalette.Current}}"/>
                                 </Trigger>
                                 <MultiTrigger>
                                     <MultiTrigger.Conditions>
                                         <Condition Property="IsMouseOver" Value="True"/>
                                         <Condition Property="IsEnabled" Value="True"/>
                                     </MultiTrigger.Conditions>
-                                    <Setter TargetName="Grip" Property="BorderBrush" Value="{x:Static local:PencilPalette.Emphasis}"/>
+                                    <Setter TargetName="Grip" Property="BorderBrush" Value="{Binding Emphasis, Source={x:Static local:PencilPalette.Current}}"/>
                                 </MultiTrigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </GridSplitter.Template>
                 </GridSplitter>
-                <local:PencilBorder Background="{x:Static local:PencilPalette.Surface}" BorderBrush="{x:Static local:PencilPalette.Line}" BorderThickness="1" CornerRadius="14" Padding="16">
+                <local:PencilBorder Background="{Binding Surface, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding Line, Source={x:Static local:PencilPalette.Current}}" BorderThickness="1" CornerRadius="14" Padding="16">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -194,8 +194,8 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <DockPanel Margin="3,0,3,12">
-                            <ComboBox x:Name="InstalledSort" DockPanel.Dock="Right" Width="112" Padding="6,4" SelectionChanged="Sort_OnChanged" ToolTip="설치됨 정렬" AutomationProperties.Name="설치됨 정렬"/>
-                            <TextBlock Text="설치됨" FontSize="24" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="InstalledSort" DockPanel.Dock="Right" Width="112" Padding="6,4" SelectionChanged="Sort_OnChanged" ToolTip="{local:Loc Key=L72911686BE6A}" AutomationProperties.Name="{local:Loc Key=L72911686BE6A}"/>
+                            <TextBlock Text="{local:Loc Key=LD1C4F4F5FF72}" FontSize="24" VerticalAlignment="Center"/>
                         </DockPanel>
                         <ListBox x:Name="InstalledList" d:ItemsSource="{Binding Installed}" Grid.Row="1" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ItemTemplate="{StaticResource MascotCard}" SelectionChanged="Installed_OnSelectionChanged" PreviewMouseLeftButtonDown="List_OnMouseDown" PreviewMouseMove="List_OnMouseMove" MouseDoubleClick="Installed_OnDoubleClick">
                             <ListBox.ItemsPanel>
@@ -204,16 +204,16 @@
                                 </ItemsPanelTemplate>
                             </ListBox.ItemsPanel>
                         </ListBox>
-                        <Button x:Name="DeleteButton" Grid.Row="2" Content="삭제" local:Pencil.Icon="Delete" Foreground="{x:Static local:PencilPalette.Danger}" Margin="3,12,3,0" HorizontalAlignment="Right" Click="Delete_OnClick"/>
+                        <Button x:Name="DeleteButton" Grid.Row="2" Content="{local:Loc Key=L6139B6C3ED73}" local:Pencil.Icon="Delete" Foreground="{Binding Danger, Source={x:Static local:PencilPalette.Current}}" Margin="3,12,3,0" HorizontalAlignment="Right" Click="Delete_OnClick"/>
                     </Grid>
                 </local:PencilBorder>
-                <local:PencilBorder x:Name="DropZone" Grid.Row="2" Background="{x:Static local:PencilPalette.Surface}" BorderBrush="{x:Static local:PencilPalette.Line}" BorderThickness="1" CornerRadius="14" Padding="16" AllowDrop="True" DragOver="Selected_OnDragOver" DragLeave="Selected_OnDragLeave" Drop="Selected_OnDrop">
+                <local:PencilBorder x:Name="DropZone" Grid.Row="2" Background="{Binding Surface, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding Line, Source={x:Static local:PencilPalette.Current}}" BorderThickness="1" CornerRadius="14" Padding="16" AllowDrop="True" DragOver="Selected_OnDragOver" DragLeave="Selected_OnDragLeave" Drop="Selected_OnDrop">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Text="선택됨" FontSize="24" Margin="3,0,3,12"/>
+                        <TextBlock Text="{local:Loc Key=L3622AD893C69}" FontSize="24" Margin="3,0,3,12"/>
                         <ListBox x:Name="SelectedList" d:ItemsSource="{Binding Selected}" Grid.Row="1" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ItemTemplate="{StaticResource SelectedMascotCard}" SelectionChanged="Selected_OnSelectionChanged" PreviewMouseLeftButtonDown="List_OnMouseDown" PreviewMouseMove="List_OnMouseMove" MouseDoubleClick="Selected_OnDoubleClick">
                             <ListBox.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -224,10 +224,10 @@
                     </Grid>
                 </local:PencilBorder>
             </Grid>
-            <local:PencilBorder Grid.Column="2" Background="{x:Static local:PencilPalette.Surface}" BorderBrush="{x:Static local:PencilPalette.Line}" BorderThickness="1" CornerRadius="14" Padding="20">
+            <local:PencilBorder Grid.Column="2" Background="{Binding Surface, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding Line, Source={x:Static local:PencilPalette.Current}}" BorderThickness="1" CornerRadius="14" Padding="20">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
-                        <local:PencilBorder x:Name="PreviewSurface" Background="{x:Static local:PencilPalette.Inset}" CornerRadius="12" Height="194" Margin="0,0,0,14">
+                        <local:PencilBorder x:Name="PreviewSurface" Background="{Binding Inset, Source={x:Static local:PencilPalette.Current}}" CornerRadius="12" Height="194" Margin="0,0,0,14">
                             <Grid>
                                 <Image x:Name="PreviewImage" d:Source="{Binding Preview}" Margin="12" Stretch="Uniform"/>
                                 <MediaElement x:Name="PreviewVideo" Visibility="Collapsed" LoadedBehavior="Manual" UnloadedBehavior="Close" Stretch="Uniform" IsMuted="True"/>
@@ -236,22 +236,35 @@
                         </local:PencilBorder>
                         <TextBlock x:Name="DetailName" d:Text="MasCat" FontSize="26"/>
                         <DockPanel Margin="0,12,0,12">
-                            <Button x:Name="StateSettingsButton" DockPanel.Dock="Right" Content="상태별 설정" local:Pencil.Icon="Settings" Padding="10,6" Click="StateSettings_OnClick"/>
-                            <TextBlock x:Name="ScopeLabel" Text="전체" VerticalAlignment="Center"/>
+                            <Button x:Name="StateSettingsButton" DockPanel.Dock="Right" Content="{local:Loc Key=L997528D7352F}" local:Pencil.Icon="Settings" Padding="10,6" Click="StateSettings_OnClick"/>
+                            <TextBlock x:Name="ScopeLabel" Text="{local:Loc Key=LA4B69FAF0C11}" VerticalAlignment="Center"/>
                         </DockPanel>
                         <ComboBox x:Name="PreviewState" Visibility="Collapsed" Margin="0,0,0,16" SelectionChanged="PreviewState_OnChanged"/>
                         <StackPanel x:Name="EditorPanel">
-                            <local:NumericDragInput x:Name="VolumeInput" Label="볼륨" Icon="Volume" ShowValueFill="True" Minimum="0" Maximum="2" DisplayScale="100" UnitsPerPixel=".5" Suffix="%" Margin="0,0,0,12" ValueCommitted="Volume_OnChanged"/>
-                            <local:NumericDragInput x:Name="SpeedInput" Label="재생 속도" Icon="Speed" ShowValueFill="True" Minimum=".25" Maximum="3" DecimalPlaces="2" UnitsPerPixel=".01" Suffix="×" Margin="0,0,0,16" ValueCommitted="Speed_OnChanged"/>
-                            <local:NumericDragInput x:Name="DurationInput" Label="이미지 재생시간" Icon="Duration" Visibility="Collapsed" IsEnabled="False" Minimum="0" Maximum="600000" DisplayScale=".001" DecimalPlaces="1" UnitsPerPixel=".1" Suffix="초" Margin="0,0,0,16" ValueCommitted="Duration_OnChanged"/>
+                            <local:NumericDragInput x:Name="VolumeInput" Label="{local:Loc Key=LBFDBCE6891E7}" Icon="Volume" ShowValueFill="True" Minimum="0" Maximum="2" DisplayScale="100" UnitsPerPixel=".5" Suffix="%" Margin="0,0,0,12" ValueCommitted="Volume_OnChanged"/>
+                            <local:NumericDragInput x:Name="SpeedInput" Label="{local:Loc Key=L086B74C4B4D5}" Icon="Speed" ShowValueFill="True" Minimum=".25" Maximum="3" DecimalPlaces="2" UnitsPerPixel=".01" Suffix="×" Margin="0,0,0,16" ValueCommitted="Speed_OnChanged"/>
+                            <local:NumericDragInput x:Name="DurationInput" Label="{local:Loc Key=LE856A7DE410B}" Icon="Duration" Visibility="Collapsed" IsEnabled="False" Minimum="0" Maximum="600000" DisplayScale=".001" DecimalPlaces="1" UnitsPerPixel=".1" Suffix="{local:Loc Key=L1FD639E1EC96}" Margin="0,0,0,16" ValueCommitted="Duration_OnChanged"/>
                             <WrapPanel x:Name="StatePlaybackOptions" Visibility="Collapsed" Margin="0,0,0,12">
-                                <CheckBox x:Name="PlayCheck" Content="재생" local:Pencil.Icon="Play" Margin="0,0,12,0" Click="Play_OnClick"/>
-                                <CheckBox x:Name="LoopCheck" Content="반복" local:Pencil.Icon="Loop" Click="Loop_OnClick"/>
-                                <CheckBox x:Name="HoldCheck" Content="클릭해야 닫힘" Margin="12,0,0,0" Click="Hold_OnClick"/>
+                                <CheckBox x:Name="PlayCheck" Content="{local:Loc Key=LD43A776C5E28}" local:Pencil.Icon="Play" Margin="0,0,12,0" Click="Play_OnClick"/>
+                                <CheckBox x:Name="LoopCheck" Content="{local:Loc Key=L58902391B937}" local:Pencil.Icon="Loop" Click="Loop_OnClick"/>
+                                <CheckBox x:Name="HoldCheck" Content="{local:Loc Key=L781C2FA885F7}" Margin="12,0,0,0" Click="Hold_OnClick"/>
                             </WrapPanel>
-                            <Button x:Name="PositionButton" Content="위치 크기 변경" local:Pencil.Icon="Position" Margin="0,8,0,16" Click="Position_OnClick"/>
-                            <Button x:Name="TestButton" Content="테스트" local:Pencil.Icon="Play" AutomationProperties.Name="테스트" Click="Test_OnClick" Background="{x:Static local:PencilPalette.Accent}" Foreground="{x:Static local:PencilPalette.OnButton}" BorderBrush="{x:Static local:PencilPalette.Accent}"/>
-                            <Button x:Name="ResetSettingsButton" Content="설정 초기화" local:Pencil.Icon="Reset" Background="{x:Static local:PencilPalette.OrangeSurface}" Foreground="{x:Static local:PencilPalette.OrangeInk}" BorderBrush="{x:Static local:PencilPalette.OrangeLine}" Margin="0,12,0,0" Click="ResetSettings_OnClick"/>
+                            <CheckBox x:Name="TaskbarCheck" Content="{local:Loc Key=L050CA8B451E8}" Margin="0,0,0,12" Click="Taskbar_OnClick"
+                                      ToolTip="{local:Loc Key=L5CEF6AB1549A}"/>
+                            <Button x:Name="PositionButton" Content="{local:Loc Key=L76A4C8BB26AD}" local:Pencil.Icon="Position" Margin="0,8,0,16" Click="Position_OnClick"/>
+                            <Button x:Name="TestButton" Content="{local:Loc Key=LBC19D3B3C9E4}" local:Pencil.Icon="Play" AutomationProperties.Name="{local:Loc Key=LBC19D3B3C9E4}" Click="Test_OnClick" Background="{Binding AccentButton, Source={x:Static local:PencilPalette.Current}}" Foreground="{Binding OnButton, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding AccentButton, Source={x:Static local:PencilPalette.Current}}"/>
+                            <StackPanel x:Name="SelectedSettingsActions" Orientation="Horizontal" Margin="0,12,0,0">
+                                <Button x:Name="ResetSettingsButton" Content="" local:Pencil.Icon="Reset" Width="42" Height="38" Padding="8" Margin="0,0,8,0"
+                                        Background="{Binding OrangeSurface, Source={x:Static local:PencilPalette.Current}}" Foreground="{Binding OrangeInk, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding OrangeLine, Source={x:Static local:PencilPalette.Current}}"
+                                        AutomationProperties.Name="{Binding [설정 초기화], Source={x:Static local:Loc.Current}}" ToolTipService.InitialShowDelay="200" Click="ResetSettings_OnClick">
+                                    <Button.ToolTip><ToolTip Style="{StaticResource CompactPencilToolTip}" Content="{Binding [설정 초기화 · 설치됨 원본의 설정으로 되돌립니다.], Source={x:Static local:Loc.Current}}"/></Button.ToolTip>
+                                </Button>
+                                <Button x:Name="ApplySettingsButton" Content="" local:Pencil.Icon="Apply" Width="42" Height="38" Padding="8"
+                                        AutomationProperties.Name="{Binding [설정 적용], Source={x:Static local:Loc.Current}}" ToolTipService.InitialShowDelay="200" Click="ApplySettings_OnClick">
+                                    <Button.ToolTip><ToolTip Style="{StaticResource CompactPencilToolTip}" Content="{Binding [설정 적용 · 현재 설정을 설치됨 원본에 적용합니다.], Source={x:Static local:Loc.Current}}"/></Button.ToolTip>
+                                </Button>
+                            </StackPanel>
+                            <Button x:Name="EditMascotButton" Content="{Binding [마스코트 수정], Source={x:Static local:Loc.Current}}" local:Pencil.Icon="Edit" Margin="0,8,0,0" Click="EditMascot_OnClick"/>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -263,12 +276,13 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Canvas IsHitTestVisible="False" Focusable="False" Panel.ZIndex="-1">
-                <Image x:Name="FooterMascotArt" Source="/AgentMascot;component/Branding/mas-cat-black.png" Width="180" Height="180" Canvas.Left="-46" Canvas.Bottom="-24" Stretch="Uniform" Opacity="0.3" IsHitTestVisible="False" Focusable="False" RenderOptions.BitmapScalingMode="HighQuality" Canvas.Top="-90" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <Image x:Name="FooterMascotArt" Source="{Binding Logo, Source={x:Static local:PencilPalette.Current}}" Width="180" Height="180" Canvas.Left="-46" Canvas.Bottom="-24" Stretch="Uniform" Opacity="0.3" IsHitTestVisible="False" Focusable="False" RenderOptions.BitmapScalingMode="HighQuality" Canvas.Top="-90" HorizontalAlignment="Left" VerticalAlignment="Top"/>
             </Canvas>
-            <TextBlock x:Name="Feedback" FontFamily="{x:Static local:PencilFonts.Numbers}" FontSize="12" VerticalAlignment="Center" TextAlignment="Right" Margin="170,0,20,0" Foreground="{x:Static local:PencilPalette.Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+            <TextBlock x:Name="Feedback" FontFamily="{x:Static local:PencilFonts.Numbers}" FontSize="12" VerticalAlignment="Center" TextAlignment="Right" Margin="170,0,20,0" Foreground="{Binding Muted, Source={x:Static local:PencilPalette.Current}}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
             <StackPanel x:Name="FooterActions" Grid.Column="1" Orientation="Horizontal">
-                <Button x:Name="RegisterButton" Content="마스코트 등록" local:Pencil.Icon="Add" Click="Register_OnClick" Background="{x:Static local:PencilPalette.Button}" Foreground="{x:Static local:PencilPalette.OnButton}" BorderBrush="{x:Static local:PencilPalette.Button}"/>
-                <Button x:Name="AppSettingsButton" Content="설정" local:Pencil.Icon="Settings" Click="Settings_OnClick" Margin="10,0,0,0"/>
+                <Button x:Name="RegisterButton" Content="{local:Loc Key=LB6230F958A83}" local:Pencil.Icon="Add" Click="Register_OnClick" Background="{Binding Button, Source={x:Static local:PencilPalette.Current}}" Foreground="{Binding OnButton, Source={x:Static local:PencilPalette.Current}}" BorderBrush="{Binding Button, Source={x:Static local:PencilPalette.Current}}"/>
+                <Button x:Name="ProjectSelectionButton" Content="{Binding [감시 프로젝트 선택], Source={x:Static local:Loc.Current}}" local:Pencil.Icon="Folder" Click="Projects_OnClick" Margin="10,0,0,0"/>
+                <Button x:Name="AppSettingsButton" Content="{local:Loc Key=L115BCED49291}" local:Pencil.Icon="Settings" Click="Settings_OnClick" Margin="10,0,0,0"/>
             </StackPanel>
         </Grid>
     </Grid>

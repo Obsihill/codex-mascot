@@ -15,7 +15,7 @@ public sealed class LibraryDashboardDesignData
     {
         var original = Image("original.png");
         Preview = Image("mascat.png");
-        Installed = new[] { new PreviewCard("기존 마스코트", original), new PreviewCard("MasCat", Preview) };
+        Installed = new[] { new PreviewCard(Loc.T("기존 마스코트"), original), new PreviewCard("MasCat", Preview) };
         Selected = new[] { new PreviewCard("MasCat", Preview) };
     }
 

@@ -9,6 +9,34 @@ public sealed class CustomizationManager
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true, PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     public MascotConfiguration Configuration { get; private set; } = new();
     public string? LoadWarning { get; private set; }
+    private MascotConfiguration? _editSnapshot;
+    internal bool IsEditing => _editSnapshot is not null;
+    internal void BeginEdit()
+    {
+        if (IsEditing) throw new InvalidOperationException("Settings are already being edited.");
+        _editSnapshot = JsonSerializer.Deserialize<MascotConfiguration>(JsonSerializer.Serialize(Configuration, Options), Options)!;
+    }
+    internal void CancelEdit()
+    {
+        if (_editSnapshot is not { } original) return;
+        // Preserve references held by the live mascot and monitor services.
+        foreach (var property in typeof(GlobalConfiguration).GetProperties()) property.SetValue(Configuration.Global, property.GetValue(original.Global));
+        foreach (var property in typeof(MonitorConfiguration).GetProperties()) property.SetValue(Configuration.Monitor, property.GetValue(original.Monitor));
+        _editSnapshot = null;
+    }
+    internal void CommitEdit(Action applyExternal)
+    {
+        var previous = File.Exists(AppPaths.ConfigFile) ? File.ReadAllText(AppPaths.ConfigFile) : null;
+        Validate(); WriteConfiguration();
+        try { applyExternal(); }
+        catch
+        {
+            if (previous is not null) File.WriteAllText(AppPaths.ConfigFile, previous);
+            else File.Delete(AppPaths.ConfigFile);
+            throw;
+        }
+        _editSnapshot = null;
+    }
     public CustomizationManager() { AppPaths.EnsureFolders(); Load(); }
     public void Load()
     {
@@ -19,7 +47,7 @@ public sealed class CustomizationManager
         }
         catch (Exception e) when (e is JsonException or IOException)
         {
-            LoadWarning = "설정 파일을 읽지 못해 기본값을 사용합니다: " + e.Message;
+            LoadWarning = Loc.T("설정 파일을 읽지 못해 기본값을 사용합니다: ") + e.Message;
             if (File.Exists(AppPaths.ConfigFile)) File.Copy(AppPaths.ConfigFile, AppPaths.ConfigFile + ".invalid-" + DateTime.Now.ToString("yyyyMMddHHmmssfff"), false);
             Configuration = new();
         }
@@ -29,7 +57,24 @@ public sealed class CustomizationManager
     private void Validate()
     {
         Configuration.Global ??= new(); Configuration.Monitor ??= new();
+        Configuration.Global.Language = Loc.Normalize(Configuration.Global.Language);
         Configuration.Monitor.RecentProjects ??= new();
+        Configuration.Monitor.Chats = (Configuration.Monitor.Chats ?? new()).Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Id))
+            .GroupBy(c => ChatWatchPolicy.Key(c.Agent, c.Id), StringComparer.Ordinal)
+            .Select(g => new ChatWatchEntry { Agent = g.First().Agent, Id = g.First().Id, ProjectPath = ProjectWatchPolicy.Normalize(g.First().ProjectPath) ?? "", Title = g.First().Title ?? "", Enabled = g.All(c => c.Enabled) }).ToList();
+        Configuration.Monitor.Projects = (Configuration.Monitor.Projects ?? new()).Where(p => p is not null && ProjectWatchPolicy.Normalize(p.Path) is not null)
+            .GroupBy(p => ProjectWatchPolicy.Normalize(p.Path)!, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new ProjectWatchEntry { Path = g.Key, Enabled = g.All(p => p.Enabled) }).ToList();
+        if (ProjectWatchPolicy.Normalize(Configuration.Monitor.ProjectFilter) is { } legacyProject)
+        {
+            if (Configuration.Monitor.Projects.Count == 0)
+            {
+                Configuration.Monitor.Projects.Add(new() { Path = legacyProject, Enabled = true });
+                Configuration.Monitor.AutoIncludeNewProjects = false;
+            }
+            Configuration.Monitor.ProjectFilter = null;
+        }
+        Configuration.Monitor.RecentSessionLimit = Math.Clamp(Configuration.Monitor.RecentSessionLimit, 1, 1000);
         Configuration.States = new Dictionary<string, StateConfiguration>(Configuration.States ?? new(), StringComparer.OrdinalIgnoreCase);
         foreach (var state in States)
         {
@@ -48,6 +93,11 @@ public sealed class CustomizationManager
     public void Save()
     {
         Validate();
+        if (IsEditing) return;
+        WriteConfiguration();
+    }
+    private void WriteConfiguration()
+    {
         var temp = AppPaths.ConfigFile + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(Configuration, Options));
         File.Move(temp, AppPaths.ConfigFile, true);
@@ -72,8 +122,10 @@ public sealed class CustomizationManager
     {
         var monitor = Configuration.Monitor;
         var startup = Configuration.Global.StartWithWindows;
+        var language = Configuration.Global.Language;
         Configuration = new MascotConfiguration { Monitor = monitor };
         Configuration.Global.StartWithWindows = startup;
+        Configuration.Global.Language = language;
         Save();
     }
     public void Export(string zipPath)
@@ -99,10 +151,10 @@ public sealed class CustomizationManager
     public void ImportTheme(string zipPath)
     {
         using var zip = ZipFile.OpenRead(zipPath);
-        var configEntry = zip.GetEntry("mascot.json") ?? throw new InvalidDataException("mascot.json이 없는 테마입니다.");
-        if (configEntry.Length > 1024 * 1024) throw new InvalidDataException("테마 설정이 너무 큽니다.");
+        var configEntry = zip.GetEntry("mascot.json") ?? throw new InvalidDataException(Loc.T("mascot.json이 없는 테마입니다."));
+        if (configEntry.Length > 1024 * 1024) throw new InvalidDataException(Loc.T("테마 설정이 너무 큽니다."));
         using var reader = new StreamReader(configEntry.Open());
-        var theme = JsonSerializer.Deserialize<MascotConfiguration>(reader.ReadToEnd(), Options) ?? throw new InvalidDataException("테마 형식 오류");
+        var theme = JsonSerializer.Deserialize<MascotConfiguration>(reader.ReadToEnd(), Options) ?? throw new InvalidDataException(Loc.T("테마 형식 오류"));
         var targetRoot = Path.Combine(AppPaths.AssetsDirectory, "themes", Guid.NewGuid().ToString("N"));
         var total = 0L;
         foreach (var cfg in (theme.States ?? new()).Values)
@@ -111,11 +163,11 @@ public sealed class CustomizationManager
             {
                 var name = sound ? cfg.Sound : cfg.Image;
                 if (string.IsNullOrWhiteSpace(name)) continue;
-                var entry = zip.GetEntry(name.Replace('\\', '/')) ?? throw new InvalidDataException("테마 에셋 누락: " + name);
+                var entry = zip.GetEntry(name.Replace('\\', '/')) ?? throw new InvalidDataException(Loc.T("테마 에셋 누락: ") + name);
                 total += entry.Length;
-                if (entry.Length > 50 * 1024 * 1024 || total > 200 * 1024 * 1024) throw new InvalidDataException("테마 파일이 너무 큽니다.");
+                if (entry.Length > 50 * 1024 * 1024 || total > 200 * 1024 * 1024) throw new InvalidDataException(Loc.T("테마 파일이 너무 큽니다."));
                 var target = Path.GetFullPath(Path.Combine(targetRoot, name));
-                if (!target.StartsWith(targetRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("허용되지 않는 테마 경로");
+                if (!target.StartsWith(targetRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException(Loc.T("허용되지 않는 테마 경로"));
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 if (!File.Exists(target)) entry.ExtractToFile(target);
                 var relative = Path.GetRelativePath(AppPaths.BaseDirectory, target).Replace('\\', '/');
@@ -125,6 +177,7 @@ public sealed class CustomizationManager
         theme.Monitor = Configuration.Monitor;
         theme.Global ??= new();
         theme.Global.StartWithWindows = Configuration.Global.StartWithWindows;
+        theme.Global.Language = Configuration.Global.Language;
         Configuration = theme; Save();
     }
 }

@@ -12,6 +12,7 @@ namespace CodexMascot.App;
 public partial class OverlayWindow : Window
 {
     private readonly DispatcherTimer _timer = new();
+    private readonly TaskbarOcclusion _taskbarOcclusion;
     private IReadOnlyList<MascotFrame> _frames = Array.Empty<MascotFrame>();
     private GlobalConfiguration _global = new();
     private CancellationTokenSource? _display;
@@ -45,6 +46,8 @@ public partial class OverlayWindow : Window
     public OverlayWindow()
     {
         InitializeComponent();
+        _taskbarOcclusion = new TaskbarOcclusion(this, MascotRoot);
+        Closed += (_, _) => _taskbarOcclusion.Dispose();
         SourceInitialized += (_, _) => HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(WindowMessage);
         LocationChanged += (_, _) =>
         {
@@ -53,7 +56,7 @@ public partial class OverlayWindow : Window
         };
         _videoAudio.Feedback += (_, message) =>
         {
-            if (message.Contains("재생 시작")) return;
+            if (message.Contains(Loc.T("재생 시작"))) return;
             LastAudioError = message; AudioError?.Invoke(this, message);
         };
         MascotVideo.MediaOpened += (_, _) =>
@@ -73,7 +76,7 @@ public partial class OverlayWindow : Window
         MascotVideo.MediaFailed += (_, e) =>
         {
             if (_closed || _hiding || MascotVideo.Source is null) return;
-            ShowMediaError("영상을 재생할 수 없습니다. 파일 또는 Windows 코덱을 확인하세요: " + e.ErrorException.Message);
+            ShowMediaError(Loc.T("영상을 재생할 수 없습니다. 파일 또는 Windows 코덱을 확인하세요: ") + e.ErrorException.Message);
         };
         _timer.Tick += (_, _) =>
         {
@@ -113,6 +116,7 @@ public partial class OverlayWindow : Window
         var lifetimeChanged = _keepCompletedVisible != config.KeepCompletedVisibleUntilClick;
         _keepCompletedVisible = config.KeepCompletedVisibleUntilClick;
         _global = config;
+        _taskbarOcclusion.Enabled = config.HideBehindTaskbar;
         UpdateVideoVolume();
         Width = 260 * Math.Clamp(config.Scale, .4, 3);
         Height = 280 * Math.Clamp(config.Scale, .4, 3);
@@ -135,7 +139,7 @@ public partial class OverlayWindow : Window
     }
     public string DescribePosition()
     {
-        var name = _global.Position switch { "top-left" => "왼쪽 위", "top-right" => "오른쪽 위", "bottom-left" => "왼쪽 아래", "center" => "중앙", "custom" => "직접 지정한 위치", _ => "오른쪽 아래" };
+        var name = _global.Position switch { "top-left" => Loc.T("왼쪽 위"), "top-right" => Loc.T("오른쪽 위"), "bottom-left" => Loc.T("왼쪽 아래"), "center" => Loc.T("중앙"), "custom" => Loc.T("직접 지정한 위치"), _ => Loc.T("오른쪽 아래") };
         return GetScreen().DeviceName + " · " + name;
     }
     public void ShowState(MascotState state, StateConfiguration config, string? imagePath, bool videoSound = true)
@@ -149,7 +153,7 @@ public partial class OverlayWindow : Window
         LastImageError = LastAudioError = null;
         try
         {
-            if (imagePath is null) throw new FileNotFoundException("이미지 파일이 없습니다.");
+            if (imagePath is null) throw new FileNotFoundException(Loc.T("이미지 파일이 없습니다."));
             if (imagePath.StartsWith("builtin:", StringComparison.Ordinal))
             {
                 MascotImage.Source = DemoMascotArtwork.Create(imagePath[8..]);
@@ -157,7 +161,7 @@ public partial class OverlayWindow : Window
             }
             else if (MascotMedia.IsVideo(imagePath))
             {
-                if (!File.Exists(imagePath)) throw new FileNotFoundException("영상 파일이 없습니다.");
+                if (!File.Exists(imagePath)) throw new FileNotFoundException(Loc.T("영상 파일이 없습니다."));
                 MascotImage.Visibility = Visibility.Collapsed; FallbackCard.Visibility = Visibility.Collapsed;
                 MascotVideo.Visibility = Visibility.Visible;
                 UpdateVideoVolume();

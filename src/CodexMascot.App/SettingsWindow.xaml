@@ -7,8 +7,8 @@
         Height="720"
         MinWidth="780"
         MinHeight="560" FontFamily="{x:Static local:PencilFonts.Handwriting}" FontSize="20"
-        Background="{x:Static local:PencilPalette.Paper}"
-        Foreground="{x:Static local:PencilPalette.Ink}"
+        Background="{Binding Paper, Source={x:Static local:PencilPalette.Current}}"
+        Foreground="{Binding Ink, Source={x:Static local:PencilPalette.Current}}"
         WindowStartupLocation="CenterOwner">
     <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="PencilTheme.xaml"/></ResourceDictionary.MergedDictionaries>
       <Style x:Key="SettingsTabs" TargetType="TabControl">

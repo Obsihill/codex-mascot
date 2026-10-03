@@ -28,6 +28,7 @@ public partial class LibraryDashboard : UserControl
     private readonly SoundPlayerService _testSound = new();
     private readonly DispatcherTimer _testTimeout = new() { Interval = TimeSpan.FromSeconds(10) };
     public event EventHandler? SettingsRequested;
+    public event EventHandler? ProjectsRequested;
     public event EventHandler? LibraryChanged;
     private sealed record PreviewChoice(string Name, MascotState State);
     private sealed record Card(LibraryMascot Mascot, ImageSource? Thumbnail, string Name);
@@ -37,6 +38,7 @@ public partial class LibraryDashboard : UserControl
     public LibraryDashboard()
     {
         InitializeComponent();
+        Loc.Changed += RefreshLanguage;
         if (System.ComponentModel.DesignerProperties.GetIsInDesignMode(this)) return;
         PreviewState.DisplayMemberPath = nameof(PreviewChoice.Name);
         foreach (var state in CustomizationManager.States) PreviewState.Items.Add(new PreviewChoice(MainWindow.StateName(state), state));
@@ -121,7 +123,7 @@ public partial class LibraryDashboard : UserControl
     {
         var mascot = _store.Library.Installed.FirstOrDefault(m => m.Id == id);
         if (mascot is null) return false;
-        if (!Commit(mascot.Name + " 선택", () => _store.Library.Select(id))) return false;
+        if (!Commit(mascot.Name + Loc.T(" 선택"), () => _store.Library.Select(id))) return false;
         var selectedId = _store.Library.Selected.Last().Id;
         RefreshLists(); SelectedList.SelectedItem = SelectedList.Items.Cast<Card>().First(c => c.Mascot.Id == selectedId); return true;
     }
@@ -129,7 +131,7 @@ public partial class LibraryDashboard : UserControl
     {
         var mascot = _store.Library.Selected.FirstOrDefault(m => m.Id == id);
         if (mascot is null) return false;
-        if (!Commit(DisplayName(mascot) + " 선택 해제", () => _store.Library.Selected.Remove(mascot))) return false;
+        if (!Commit(DisplayName(mascot) + Loc.T(" 선택 해제"), () => _store.Library.Selected.Remove(mascot))) return false;
         StopTest(); RefreshLists();
         if (_current?.Id == id)
             Inspect(_store.Library.Selected.FirstOrDefault(m => m.SourceId == mascot.SourceId) ?? _store.Library.Installed.First(m => m.Id == mascot.SourceId));
@@ -144,12 +146,12 @@ public partial class LibraryDashboard : UserControl
     {
         if (InstalledList.SelectedItem is not Card card) return;
         var panel = new StackPanel { Margin = new Thickness(24) };
-        panel.Children.Add(new TextBlock { Text = card.Name + "을(를) 삭제할까요?", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
-        panel.Children.Add(new TextBlock { Text = "목록에서 제거합니다. 이미지·영상 파일은 유지됩니다.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 20) });
-        var window = Dialog("마스코트 삭제", panel);
+        panel.Children.Add(new TextBlock { Text = card.Name + Loc.T("을(를) 삭제할까요?"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
+        panel.Children.Add(new TextBlock { Text = Loc.T("목록에서 제거합니다. 이미지·영상 파일은 유지됩니다."), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 20) });
+        var window = Dialog(Loc.T("마스코트 삭제"), panel);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var cancel = new Button { Content = "취소", IsCancel = true, Margin = new Thickness(0, 0, 8, 0) };
-        var confirm = new Button { Name = "ConfirmDelete", Content = "삭제", Foreground = Brushes.Firebrick };
+        var cancel = new Button { Content = Loc.T("취소"), IsCancel = true, Margin = new Thickness(0, 0, 8, 0) };
+        var confirm = new Button { Name = "ConfirmDelete", Content = Loc.T("삭제"), Foreground = PencilPalette.Danger };
         cancel.Click += (_, _) => window.Close();
         confirm.Click += (_, _) => { if (DeleteMascot(card.Mascot.Id)) window.Close(); };
         buttons.Children.Add(cancel); buttons.Children.Add(confirm); panel.Children.Add(buttons);
@@ -160,7 +162,7 @@ public partial class LibraryDashboard : UserControl
         var index = _store.Library.Installed.FindIndex(m => m.Id == id);
         if (index < 0) return false;
         var mascot = _store.Library.Installed[index];
-        if (!Commit(mascot.Name + " 삭제", () => { _store.Library.Installed.RemoveAt(index); _store.Library.Selected.RemoveAll(m => m.SourceId == id); })) return false;
+        if (!Commit(mascot.Name + Loc.T(" 삭제"), () => { _store.Library.Installed.RemoveAt(index); _store.Library.Selected.RemoveAll(m => m.SourceId == id); })) return false;
         if (_current?.Id == id || _current?.SourceId == id)
         {
             StopTest(); StopPreview(); _current = null;
@@ -249,7 +251,7 @@ public partial class LibraryDashboard : UserControl
 
     private void PreviewState_OnChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_activeState is null || PreviewState.SelectedItem is not PreviewChoice choice) return;
+        if (_loading || _activeState is null || PreviewState.SelectedItem is not PreviewChoice choice) return;
         DurationInput.CancelEdit();
         _activeState = choice.State; _history?.BreakMerge(); StopTest(); RefreshInspector(); ShowPreview();
     }
@@ -262,12 +264,11 @@ public partial class LibraryDashboard : UserControl
             // The whole-scope inspector is a package preview, not a playback state.
             if (_activeState is null)
             {
-                PreviewImage.Source = LoadThumbnail(_store.CoverPath(_current, _manager))
-                    ?? throw new FileNotFoundException("대표 이미지 없음");
+                PreviewImage.Source = LoadThumbnail(_store.CoverPath(_current, _manager));
                 return;
             }
             var path = _store.MediaPath(_current, _manager, PreviewEvent);
-            if (path is null) throw new FileNotFoundException("이미지 없음");
+            if (path is null) return;
             if (path.StartsWith("builtin:", StringComparison.Ordinal)) PreviewImage.Source = DemoMascotArtwork.Create(path[8..]);
             else if (MascotMedia.IsVideo(path))
             { PreviewVideo.Visibility = Visibility.Visible; PreviewVideo.Source = new Uri(path); PreviewVideo.SpeedRatio = _current.Settings(PreviewEvent).Speed; PreviewVideo.Play(); }
@@ -289,7 +290,8 @@ public partial class LibraryDashboard : UserControl
     {
         if (_current is null) return;
         StopTest(); _testMascot = _current; _testAll = _activeState is null;
-        foreach (var state in _activeState is { } selected ? new[] { selected } : CustomizationManager.States) _testStates.Enqueue(state);
+        foreach (var state in _activeState is { } selected ? new[] { selected } : CustomizationManager.States)
+            if (!string.IsNullOrWhiteSpace(_current.For(state).Image)) _testStates.Enqueue(state);
         AdvanceTest();
     }
     internal void AdvanceTest()
@@ -297,7 +299,7 @@ public partial class LibraryDashboard : UserControl
         _testTimeout.Stop(); _testSound.Stop();
         var previous = _testOverlay; _testOverlay = null; previous?.Close();
         if (_testMascot is null || !_testStates.TryDequeue(out var state))
-        { var completed = _testMascot is not null && _testAll; StopTest(); if (completed) Feedback.Text = "전체 테스트 완료"; return; }
+        { var completed = _testMascot is not null && _testAll; StopTest(); if (completed) Feedback.Text = Loc.T("전체 테스트 완료"); return; }
         var mascot = _testMascot;
         var global = LibraryStore.Placement(mascot, _manager.Configuration.Global, state);
         global.KeepCompletedVisibleUntilClick = false; global.ClickThrough = false;
@@ -325,20 +327,39 @@ public partial class LibraryDashboard : UserControl
         _testOverlay.ShowState(state, cfg, path, sound && string.IsNullOrWhiteSpace(cfg.Sound));
         if (sound && !string.IsNullOrWhiteSpace(cfg.Sound) && global.SoundEnabled && cfg.Volume > 0)
             _testSound.Play(_manager.ResolveAsset(cfg.Sound), cfg.Volume * global.MasterVolume, cfg.PlaybackSpeed);
-        TestButton.Content = "중지"; Pencil.SetIcon(TestButton, PencilIconKind.Stop);
-        System.Windows.Automation.AutomationProperties.SetName(TestButton, "중지");
-        if (_testAll) Feedback.Text = "전체 테스트 · " + MainWindow.StateName(state);
+        TestButton.Content = Loc.T("중지"); Pencil.SetIcon(TestButton, PencilIconKind.Stop);
+        System.Windows.Automation.AutomationProperties.SetName(TestButton, Loc.T("중지"));
+        if (_testAll) Feedback.Text = Loc.T("전체 테스트 · ") + MainWindow.StateName(state);
         if (!video) _testTimeout.Start();
     }
     public void StopTest()
     {
-        if (_testMascot is not null && _testAll && Feedback.Text.StartsWith("전체 테스트 ·", StringComparison.Ordinal)) Feedback.Text = "전체 테스트 중지";
+        if (_testMascot is not null && _testAll && Feedback.Text.StartsWith(Loc.T("전체 테스트 ·"), StringComparison.Ordinal)) Feedback.Text = Loc.T("전체 테스트 중지");
         _testStates.Clear(); _testMascot = null;
         _testTimeout.Stop(); _testSound.Stop(); var overlay = _testOverlay; _testOverlay = null; overlay?.Close();
-        TestButton.Content = "테스트"; Pencil.SetIcon(TestButton, PencilIconKind.Play);
-        System.Windows.Automation.AutomationProperties.SetName(TestButton, "테스트");
+        TestButton.Content = Loc.T("테스트"); Pencil.SetIcon(TestButton, PencilIconKind.Play);
+        System.Windows.Automation.AutomationProperties.SetName(TestButton, Loc.T("테스트"));
     }
-    public void Shutdown() { _usageTimer.Stop(); SaveUsage(); _editorDialog?.Close(); StopTest(); StopPreview(); _testSound.Dispose(); }
+    private void RefreshLanguage(object? sender, EventArgs e)
+    {
+        var selected = (PreviewState.SelectedItem as PreviewChoice)?.State ?? MascotState.Completed;
+        _loading = true;
+        PreviewState.Items.Clear();
+        foreach (var state in CustomizationManager.States) PreviewState.Items.Add(new PreviewChoice(MainWindow.StateName(state), state));
+        PreviewState.SelectedItem = PreviewState.Items.Cast<PreviewChoice>().First(c => c.State == selected);
+        if (_store is not null)
+        {
+            InstalledSort.ItemsSource = new[] { new SortChoice(Loc.T("이름"), "name"), new SortChoice(Loc.T("설치 날짜"), "installed"), new SortChoice(Loc.T("선호"), "preference") };
+            InstalledSort.SelectedValue = _store.Library.InstalledSort;
+        }
+        _loading = false;
+        StateSettingsButton.Content = _activeState is null ? Loc.T("상태별 설정") : Loc.T("전체로");
+        ScopeLabel.Text = _activeState is null ? Loc.T("전체") : Loc.T("상태별");
+        RefreshInspector();
+        TestButton.Content = Loc.T(IsTesting ? "중지" : "테스트");
+        System.Windows.Automation.AutomationProperties.SetName(TestButton, TestButton.Content.ToString());
+    }
+    public void Shutdown() { Loc.Changed -= RefreshLanguage; _usageTimer.Stop(); SaveUsage(); _editorDialog?.Close(); StopTest(); StopPreview(); _testSound.Dispose(); }
     private void Register_OnClick(object sender, RoutedEventArgs e)
     {
         StopTest();
@@ -348,12 +369,13 @@ public partial class LibraryDashboard : UserControl
         {
             if (editor.ShowDialog() != true || editor.Result is not { } result) return;
             foreach (var state in CustomizationManager.States) result.Settings(state);
-            if (!Commit(result.Name + " 등록", () => _store.Library.Installed.Add(result))) return;
+            if (!Commit(result.Name + Loc.T(" 등록"), () => _store.Library.Installed.Add(result))) return;
             RefreshLists(); InstalledList.SelectedItem = InstalledList.Items.Cast<Card>().First(c => c.Mascot.Id == result.Id);
         }
         finally { _editorDialog = null; }
     }
     private void Settings_OnClick(object sender, RoutedEventArgs e) { StopTest(); SettingsRequested?.Invoke(this, EventArgs.Empty); }
+    private void Projects_OnClick(object sender, RoutedEventArgs e) => ProjectsRequested?.Invoke(this, EventArgs.Empty);
     private Window Dialog(string title, StackPanel panel)
     {
         _editorDialog?.Close();

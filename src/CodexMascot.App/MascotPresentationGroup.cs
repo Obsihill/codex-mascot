@@ -20,8 +20,10 @@ internal sealed class MascotPresentationGroup : IDisposable
     }
     internal IReadOnlyList<OverlayWindow> Windows => _active.Select(p => p.Overlay).ToArray();
     internal static int CompletionVisibleMilliseconds(LibraryStore store, CustomizationManager manager) =>
-        store.Library.Eligible(MascotState.Completed)
-            .Select(m => LibraryStore.Playback(m, MascotState.Completed, manager.Configuration.For(MascotState.Completed)).ShowDurationMs)
+        NotificationVisibleMilliseconds(store, manager, MascotState.Completed);
+    internal static int NotificationVisibleMilliseconds(LibraryStore store, CustomizationManager manager, MascotState state) =>
+        store.Library.Eligible(state)
+            .Select(m => LibraryStore.Playback(m, state, manager.Configuration.For(state)).ShowDurationMs)
             .Select(ms => ms > 0 ? ms : 4000).DefaultIfEmpty(4000).Max();
 
     public void Show(LibraryStore store, CustomizationManager manager, MascotState state, bool sound)

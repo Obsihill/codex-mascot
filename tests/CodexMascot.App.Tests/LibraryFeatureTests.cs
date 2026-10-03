@@ -56,9 +56,24 @@ internal static class LibraryFeatureTests
         foreach (var pair in bot.States) slots[pair.Key] = pair.Value.Image;
         var package = MascotPackageEditor.BuildPackage("Bundle", slots, new HashSet<string>(), manager, bot);
         check(package.States.Count == 6 && File.ReadAllBytes(manager.ResolveAsset(package.CoverImage)!).SequenceEqual(File.ReadAllBytes(manager.ResolveAsset(bot.CoverImage)!)) && package.For(MascotState.Failed).Image != package.For(MascotState.Completed).Image, "package editor saves a cover plus state-specific media in its own folder");
-        slots.Remove("failed"); var rejected = false;
-        try { MascotPackageEditor.BuildPackage("Incomplete", slots, new HashSet<string>(), manager); } catch (InvalidOperationException) { rejected = true; }
-        check(rejected, "registration rejects incomplete mascot packages");
+        slots.Remove("failed");
+        var partial = MascotPackageEditor.BuildPackage("Incomplete", slots, new HashSet<string>(), manager);
+        check(partial.For(MascotState.Failed).Image is null && partial.CoverImage is not null,
+            "registration permits an omitted state without borrowing another state's image");
+        var empty = MascotPackageEditor.BuildPackage("Name only", new Dictionary<string, string?>(), new HashSet<string>(), manager);
+        check(empty.CoverImage is null && empty.States.Count == 6 && empty.States.Values.All(m => m.Image is null) &&
+              MascotFolderImport.Read(new MascotFolderLibrary(AppPaths.LibraryDirectory).PackageDirectory(empty.Id)).CoverImage is null,
+            "name-only registration creates a portable package with no placeholder media");
+        store.Library.Installed.Add(empty); store.Library.Select(empty.Id); store.Save();
+        var emptyReloaded = new LibraryStore(file);
+        check(emptyReloaded.Library.Installed.Single(m => m.Id == empty.Id).CoverImage is null &&
+              emptyReloaded.Library.Installed.Single(m => m.Id == empty.Id).States.Values.All(m => m.Image is null) &&
+              !emptyReloaded.Library.Eligible(MascotState.Completed).Any(m => m.SourceId == empty.Id),
+            "empty media stays empty after reload and cannot open a missing-media notification");
+        var rejected = false;
+        try { MascotPackageEditor.BuildPackage(" ", new Dictionary<string, string?>(), new HashSet<string>(), manager); }
+        catch (InvalidOperationException) { rejected = true; }
+        check(rejected, "a mascot name is still required");
         var fileSlots = new Dictionary<string, string?> { ["cover"] = Path.Combine(AppContext.BaseDirectory, "assets", "images", "idle.png") };
         foreach (var state in CustomizationManager.States)
             fileSlots[MascotConfiguration.StateKey(state)] = manager.ResolveImage(state);
@@ -72,6 +87,12 @@ internal static class LibraryFeatureTests
         {
             host.Show(); Pump();
             var installed = (ListBox)dashboard.FindName("InstalledList");
+            installed.SelectedItem = installed.Items.Cast<object>().Single(c =>
+                ((LibraryMascot)c.GetType().GetProperty("Mascot")!.GetValue(c)!).Id == empty.Id);
+            check(!((Button)dashboard.FindName("TestButton")).IsEnabled &&
+                  ((Image)dashboard.FindName("PreviewImage")).Source is null &&
+                  ((TextBlock)dashboard.FindName("PreviewError")).Visibility == Visibility.Collapsed,
+                "name-only mascots show a quiet empty preview and cannot start an empty media test");
             installed.SelectedIndex = 2;
             check(dashboard.AddMascot("cat") && dashboard.AddMascot("cat"), "UI allows duplicate independent selections");
             var volumeInput = (NumericDragInput)dashboard.FindName("VolumeInput"); volumeInput.CommitValue(.25);
@@ -198,11 +219,36 @@ internal static class LibraryFeatureTests
         }
         finally { dashboard.Shutdown(); host.Close(); }
         var autoStart = manager.Configuration.Monitor.AutoStart;
+        var oldCodexHome = manager.Configuration.Monitor.CodexHome;
+        var oldClaudeHome = manager.Configuration.Monitor.ClaudeHome;
+        manager.Configuration.Monitor.CodexHome = Path.Combine(dir, "fixture-codex-home");
+        manager.Configuration.Monitor.ClaudeHome = Path.Combine(dir, "fixture-claude-home");
         manager.Configuration.Monitor.AutoStart = false; manager.Save();
         var main = new MainWindow();
         try
         {
             main.Show(); Pump();
+            var mainManager = (CustomizationManager)typeof(MainWindow).GetField("_customization", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(main)!;
+            var allowedProject = Path.Combine(dir, "watched-project");
+            var blockedProject = Path.Combine(dir, "excluded-project");
+            var futureProject = Path.Combine(dir, "new-project");
+            mainManager.Configuration.Monitor.AutoIncludeNewProjects = false;
+            mainManager.Configuration.Monitor.Projects = new()
+            {
+                new() { Path = allowedProject, Enabled = true }, new() { Path = blockedProject, Enabled = false }
+            };
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.ThreadStarted, "Codex 기록", "included") { ProjectPath = allowedProject, IsReplay = true });
+            mainManager.Configuration.Monitor.Chats.Add(new() { Agent = AgentKind.Codex, Id = "excluded-test-chat", ProjectPath = allowedProject, Enabled = false });
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.ThreadStarted, "Codex 기록", "excluded-test-chat") { ProjectPath = allowedProject, IsReplay = true });
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.TurnStarted, "Codex Hook", "excluded-test-chat", "turn") { IsReplay = true });
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.ThreadStarted, "Codex 기록", "blocked") { ProjectPath = blockedProject, IsReplay = true });
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.ThreadStarted, "Codex 기록", "future") { ProjectPath = futureProject, IsReplay = true });
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.TurnStarted, "Codex Hook", "blocked", "turn") { IsReplay = true });
+            main.ReceiveMonitoredEvent(AgentKind.Claude, new(CodexEventKind.ThreadStarted, "Claude Hook", "unknown") { IsReplay = true });
+            check(main.JobsListView.Items.Count == 1, "excluded projects, new blocked projects, and pathless hooks cannot enter the job list");
+            check(mainManager.Configuration.Monitor.Projects.Any(p => p.Path == futureProject && !p.Enabled), "new blocked project is discoverable for later manual inclusion");
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.ThreadStatusChanged, "Codex Hook", "included", Status: "idle") { IsReplay = true });
+            check(main.JobsListView.Items.Count == 1, "included project accepts pathless follow-up events through the session mapping");
             check(main.Title == "Agent Mascot" && ((TextBlock)main.Template.FindName("WindowTitle", main)).Text == "Agent Mascot", "native and pencil caption titles use Agent Mascot");
             var tray = (System.Windows.Forms.NotifyIcon)typeof(MainWindow).GetField("_tray", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(main)!;
             check(tray.Text.StartsWith("Agent Mascot", StringComparison.Ordinal) && tray.ContextMenuStrip!.Items[0].Text == "Agent Mascot 열기", "tray tooltip and open menu use Agent Mascot");
@@ -225,26 +271,62 @@ internal static class LibraryFeatureTests
             check(main.Icon is not null, "studio window uses packaged mascot icon");
             var footerArt = (Image)((LibraryDashboard)main.FindName("Dashboard")).FindName("FooterMascotArt");
             check(footerArt.Source is not null && !footerArt.IsHitTestVisible && !footerArt.Focusable, "footer artwork is packaged and cannot intercept interaction");
-            check(AppBrand.TrayIconUri != AppBrand.IconUri, "black tray artwork is independent of executable icon");
+            check(AppBrand.TrayIconUri != AppBrand.IconUri, "tray artwork resource remains independent of executable icon");
             using (var trayIcon = AppBrand.CreateTrayIcon()) check(trayIcon.Width == 32 && trayIcon.Height == 32, "tray icon loads packaged 32px artwork independently of its stream");
-            var settings = Application.Current.Windows.OfType<Window>().Single(w => w.Title == "Agent Mascot · 앱 설정");
+            var settings = Application.Current.Windows.OfType<Window>().Single(w => w.Title == "설정");
             var settingsTabs = ((SettingsWindow)settings).Pages;
-            check(settingsTabs.Items.Cast<TabItem>().Select(t => (string)t.Header).SequenceEqual(new[] { "일반", "알림", "연결", "정보" }), "studio settings excludes legacy file and sound controls");
+            check(settingsTabs.Items.Cast<TabItem>().Select(t => (string)t.Header).SequenceEqual(new[] { "일반", "알림", "연결", "정보", "언어 / Language" }), "studio settings includes language and excludes legacy file and sound controls");
             CaptureDialog(settings, "settings-overview");
             settingsTabs.SelectedIndex = 2; Pump();
+            var list = (ListView)main.FindName("JobsListView");
+            check(main.FindName("HooksToggle") is null && main.FindName("StartButton") is null && main.FindName("PromptTextBox") is null, "manual hook toggle and task launcher are removed");
+            check(!list.Focusable && !list.IsTabStop && list.ItemContainerStyle.Setters.OfType<Setter>().Any(s => s.Property == UIElement.IsHitTestVisibleProperty && Equals(s.Value, false)), "monitor list cannot receive row clicks or keyboard selection");
+            var themeScreenshots = Environment.GetEnvironmentVariable("MASCOT_THEME_SCREENSHOT_DIR");
+            var previousDark = PencilPalette.Current.IsDark;
+            foreach (var dark in new[] { true, false })
+            {
+                AppTheme.Apply(dark); Pump();
+                var headers = VisualChildren(list).OfType<GridViewColumnHeader>().ToArray();
+                check(headers.Length > 0 && headers.All(h => ReferenceEquals(h.Background, PencilPalette.Inset) && ReferenceEquals(h.Foreground, PencilPalette.Ink)), "monitor headers follow the app theme without native white gradients");
+                if (!string.IsNullOrWhiteSpace(themeScreenshots))
+                { Directory.CreateDirectory(themeScreenshots); Capture(settings, Path.Combine(themeScreenshots, "connections-" + (dark ? "dark" : "light") + ".png")); }
+            }
+            AppTheme.Apply(previousDark);
             check(settings.IsVisible && ((Grid)settings.Content).IsVisible, "connection controls open in settings window");
             check(PencilWindowTests.Caption(settings, "Close").IsVisible, "connection settings use pencil window chrome");
             var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
             if (!string.IsNullOrWhiteSpace(screenshot)) Capture(settings, Path.ChangeExtension(screenshot, ".connections.png"));
             settings.Close(); main.OpenWorkspaceSettings(); Pump();
-            check(Application.Current.Windows.OfType<Window>().Count(w => w.Title == "Agent Mascot · 앱 설정") == 1, "settings can reopen without losing or duplicating controls");
+            check(Application.Current.Windows.OfType<Window>().Count(w => w.Title == "설정") == 1, "settings can reopen without losing or duplicating controls");
+            Application.Current.Windows.OfType<SettingsWindow>().Single().Close();
+            var projectsButton = (Button)main.Dashboard.FindName("ProjectSelectionButton");
+            var footer = (StackPanel)main.Dashboard.FindName("FooterActions");
+            check(projectsButton.Content?.ToString() == "감시 프로젝트 선택" && footer.Children.IndexOf(projectsButton) < footer.Children.IndexOf((UIElement)main.Dashboard.FindName("AppSettingsButton")), "monitored-project selector is left of settings in the studio footer");
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.TurnStarted, "Codex Hook", "excluded-test-chat", "current") { ProjectPath = allowedProject, IsReplay = true });
+            main.ReceiveMonitoredEvent(AgentKind.Codex, new(CodexEventKind.TurnStarted, "Codex Hook", "blocked", "current") { ProjectPath = blockedProject, IsReplay = true });
+            projectsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump();
+            check(Application.Current.Windows.OfType<ProjectSelectionWindow>().Count() == 1, "project button opens the project selection window");
+            var picker = Application.Current.Windows.OfType<ProjectSelectionWindow>().Single();
+            for (var attempt = 0; attempt < 30 && picker.ProjectChoices.Count == 0; attempt++)
+            { System.Threading.Thread.Sleep(10); Pump(); }
+            check(picker.ProjectChoices.ContainsKey(allowedProject) && picker.ProjectChoices.ContainsKey(blockedProject) &&
+                  !picker.ProjectChoices.ContainsKey(futureProject), "picker shows actively monitored chats outside the recent file scan, including excluded chats, but hides saved inactive history");
+            picker.Close();
         }
-        finally { main.ExitApplication(); manager.Configuration.Monitor.AutoStart = autoStart; manager.Save(); }
+        finally { main.ExitApplication(); manager.Configuration.Monitor.AutoStart = autoStart; manager.Configuration.Monitor.CodexHome = oldCodexHome; manager.Configuration.Monitor.ClaudeHome = oldClaudeHome; manager.Save(); }
     }
     private static void CaptureDialog(Window dialog, string suffix)
     {
         var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
         if (!string.IsNullOrWhiteSpace(screenshot)) Capture(dialog, Path.ChangeExtension(screenshot, "." + suffix + ".png"));
+    }
+    private static IEnumerable<DependencyObject> VisualChildren(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i); yield return child;
+            foreach (var nested in VisualChildren(child)) yield return nested;
+        }
     }
     internal static void Capture(FrameworkElement element, string path)
     {

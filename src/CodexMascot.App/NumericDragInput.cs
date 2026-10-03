@@ -39,7 +39,8 @@ public sealed class NumericDragInput : UserControl
     public int DecimalPlaces { get; set; }
     // Expressed in display units, e.g. 0.5 percent or 1 desktop pixel per DIP.
     public double UnitsPerPixel { get; set; } = 1;
-    public string Suffix { get; set; } = "";
+    public static readonly DependencyProperty SuffixProperty = DependencyProperty.Register(nameof(Suffix), typeof(string), typeof(NumericDragInput), new PropertyMetadata("", RenderChanged));
+    public string Suffix { get => (string)GetValue(SuffixProperty); set => SetValue(SuffixProperty, value); }
     public event EventHandler? ValuePreviewed;
     public event EventHandler? ValueCommitted;
     internal bool IsEditing => _editing;
@@ -52,7 +53,7 @@ public sealed class NumericDragInput : UserControl
     {
         Focusable = true; Cursor = Cursors.SizeWE; MinHeight = 40;
         var ink = PencilPalette.Ink;
-        _label.Foreground = _display.Foreground = _editor.Foreground = ink; _editor.Margin = new Thickness(0);
+        _label.Foreground = _display.Foreground = _editor.Foreground = _icon.Foreground = ink; _editor.Margin = new Thickness(0);
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -69,6 +70,13 @@ public sealed class NumericDragInput : UserControl
         IsEnabledChanged += (_, _) => { if (!IsEnabled) CancelEdit(); Opacity = IsEnabled ? 1 : .45; };
         Unloaded += (_, _) => CancelEdit(); Loaded += (_, _) => Render();
         Render();
+        System.ComponentModel.PropertyChangedEventManager.AddHandler(PencilPalette.Current, ThemeChanged, string.Empty);
+    }
+    private void ThemeChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        _fillFraction = double.NaN;
+        _label.Foreground = _display.Foreground = _editor.Foreground = _icon.Foreground = PencilPalette.Ink;
+        Render();
     }
     private static void RenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((NumericDragInput)d).Render();
     private string Number(double value) => (value * DisplayScale).ToString("F" + DecimalPlaces, CultureInfo.CurrentCulture);
@@ -78,8 +86,8 @@ public sealed class NumericDragInput : UserControl
         _label.Text = Label; _display.Text = IsMixed ? "??" : Number(Value) + Suffix;
         _icon.Kind = Icon; _icon.Visibility = Icon == PencilIconKind.None ? Visibility.Collapsed : Visibility.Visible;
         _surface.Background = ValueBackground();
-        _surface.BorderBrush = _invalid ? Brushes.Firebrick : IsEnabled && IsMouseOver ? PencilPalette.Emphasis : IsKeyboardFocusWithin ? PencilPalette.Accent : PencilPalette.Line;
-        ToolTip = _invalid ? "올바른 숫자를 입력하세요." : null;
+        _surface.BorderBrush = _invalid ? PencilPalette.Danger : IsEnabled && IsMouseOver ? PencilPalette.Emphasis : IsKeyboardFocusWithin ? PencilPalette.Accent : PencilPalette.Line;
+        ToolTip = _invalid ? Loc.T("올바른 숫자를 입력하세요.") : null;
         System.Windows.Automation.AutomationProperties.SetName(this, Label);
     }
     private Brush ValueBackground()

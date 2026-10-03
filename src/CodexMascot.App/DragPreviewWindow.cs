@@ -15,8 +15,8 @@ internal sealed class DragPreviewWindow : Window
         ShowInTaskbar = false; ShowActivated = false; Topmost = true; IsHitTestVisible = false;
         var panel = new StackPanel();
         panel.Children.Add(new Image { Source = image, Height = 76, Stretch = Stretch.Uniform });
-        panel.Children.Add(new TextBlock { Text = name, Foreground = Brushes.Black, TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 6, 0, 0) });
-        Content = new Border { Background = Brushes.White, CornerRadius = new CornerRadius(10), Padding = new Thickness(10), Child = panel };
+        panel.Children.Add(new TextBlock { Text = name, Foreground = PencilPalette.Ink, TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 6, 0, 0) });
+        Content = new Border { Background = PencilPalette.Surface, CornerRadius = new CornerRadius(10), Padding = new Thickness(10), Child = panel };
         SourceInitialized += (_, _) =>
         {
             var hwnd = new WindowInteropHelper(this).Handle;

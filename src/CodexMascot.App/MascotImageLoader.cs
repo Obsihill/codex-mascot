@@ -13,13 +13,13 @@ public static class MascotImageLoader
 {
     public static IReadOnlyList<MascotFrame> Load(string path, StateConfiguration config)
     {
-        if (new FileInfo(path).Length > 50 * 1024 * 1024) throw new InvalidDataException("이미지 파일은 50MB 이하로 선택해 주세요.");
+        if (new FileInfo(path).Length > 50 * 1024 * 1024) throw new InvalidDataException(Loc.T("이미지 파일은 50MB 이하로 선택해 주세요."));
         var info = SixLabors.ImageSharp.Image.Identify(path);
         if ((long)info.Width * info.Height * Math.Max(1, info.FrameMetadataCollection.Count) > 48_000_000)
-            throw new InvalidDataException("이미지가 너무 큽니다. 프레임 수 또는 해상도를 줄여 주세요.");
+            throw new InvalidDataException(Loc.T("이미지가 너무 큽니다. 프레임 수 또는 해상도를 줄여 주세요."));
         using var image = SixLabors.ImageSharp.Image.Load<Bgra32>(path);
         if ((long)image.Width * image.Height * image.Frames.Count > 48_000_000)
-            throw new InvalidDataException("이미지가 너무 큽니다. 프레임 수 또는 해상도를 줄여 주세요.");
+            throw new InvalidDataException(Loc.T("이미지가 너무 큽니다. 프레임 수 또는 해상도를 줄여 주세요."));
         var result = new List<MascotFrame>();
         foreach (var frame in image.Frames)
         {
@@ -39,7 +39,7 @@ public static class MascotImageLoader
                 var rows = Math.Clamp(config.SpriteRows, 1, 32);
                 var width = frame.Width / columns;
                 var height = frame.Height / rows;
-                if (width == 0 || height == 0) throw new InvalidDataException("스프라이트 칸 크기를 확인하세요.");
+                if (width == 0 || height == 0) throw new InvalidDataException(Loc.T("스프라이트 칸 크기를 확인하세요."));
                 for (var y = 0; y < rows; y++) for (var x = 0; x < columns; x++)
                 {
                     var crop = new CroppedBitmap(bitmap, new System.Windows.Int32Rect(x * width, y * height, width, height));

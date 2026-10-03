@@ -63,7 +63,7 @@ internal sealed class MascotFolderLibrary
         var builtin = tone || source.StartsWith("builtin:", StringComparison.Ordinal);
         var full = builtin ? source : Resolve(source);
         if (imported.TryGetValue(full, out var cached)) return cached;
-        if (!builtin && !File.Exists(full)) throw new FileNotFoundException("마스코트 파일을 찾을 수 없습니다. 기존 파일과 설정은 유지됩니다.", full);
+        if (!builtin && !File.Exists(full)) throw new FileNotFoundException(Loc.T("마스코트 파일을 찾을 수 없습니다. 기존 파일과 설정은 유지됩니다."), full);
         if (!builtin && full.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             return imported[full] = AssetPath(full);
 

@@ -5,7 +5,7 @@ using System.Windows.Media;
 
 namespace CodexMascot.App;
 
-public enum PencilIconKind { None, Volume, Speed, Play, Stop, Settings, Duration, Position, Loop, Add, Remove, Delete, Reset, Back, Folder, ChevronDown, Minimize, Maximize, Restore, Close }
+public enum PencilIconKind { None, Volume, Speed, Play, Stop, Settings, Duration, Position, Loop, Add, Remove, Delete, Reset, Back, Folder, ChevronDown, Minimize, Maximize, Restore, Close, MonitorAll, ExcludeAll, Edit, Apply }
 
 public static class PencilFonts
 {
@@ -19,40 +19,6 @@ public static class Pencil
     public static readonly DependencyProperty IconProperty = DependencyProperty.RegisterAttached("Icon", typeof(PencilIconKind), typeof(Pencil), new PropertyMetadata(PencilIconKind.None));
     public static PencilIconKind GetIcon(DependencyObject element) => (PencilIconKind)element.GetValue(IconProperty);
     public static void SetIcon(DependencyObject element, PencilIconKind value) => element.SetValue(IconProperty, value);
-}
-
-public static class PencilPalette
-{
-    private static SolidColorBrush Brush(string color) { var brush = (SolidColorBrush)new BrushConverter().ConvertFromString(color)!; brush.Freeze(); return brush; }
-    public static SolidColorBrush Ink { get; } = Brush("#373A35");
-    public static SolidColorBrush Muted { get; } = Brush("#696A60");
-    public static SolidColorBrush Line { get; } = Brush("#88887A");
-    public static SolidColorBrush Emphasis { get; } = Brush("#252A22");
-    public static SolidColorBrush Surface { get; } = Brush("#FCFAF4");
-    public static SolidColorBrush Inset { get; } = Brush("#F0EEE5");
-    public static SolidColorBrush ValueFill { get; } = Brush("#D8D5CC");
-    public static SolidColorBrush Accent { get; } = Brush("#587461");
-    public static SolidColorBrush Selected { get; } = Brush("#E7ECDF");
-    public static SolidColorBrush Danger { get; } = Brush("#97605A");
-    public static SolidColorBrush Button { get; } = Brush("#626A58");
-    public static SolidColorBrush OnButton { get; } = Brush("#FFFEF8");
-    public static SolidColorBrush OrangeSurface { get; } = Brush("#F3D8B5");
-    public static SolidColorBrush OrangeInk { get; } = Brush("#82491F");
-    public static SolidColorBrush OrangeLine { get; } = Brush("#B76A31");
-    public static DrawingBrush Paper { get; } = CreatePaper();
-    private static DrawingBrush CreatePaper()
-    {
-        var drawing = new DrawingGroup();
-        using (var dc = drawing.Open())
-        {
-            dc.DrawRectangle(Brush("#F4F0E5"), null, new Rect(0, 0, 64, 64));
-            var grain = Brush("#12706448"); var random = new Random(711);
-            for (var i = 0; i < 85; i++) dc.DrawEllipse(grain, null, new Point(random.NextDouble() * 64, random.NextDouble() * 64), .28, .42);
-        }
-        drawing.Freeze();
-        var brush = new DrawingBrush(drawing) { TileMode = TileMode.Tile, ViewportUnits = BrushMappingMode.Absolute, Viewport = new Rect(0, 0, 64, 64), Stretch = Stretch.None };
-        brush.Freeze(); return brush;
-    }
 }
 
 // Retains Border's layout/hit testing; only its paint is replaced. Geometry is
@@ -153,8 +119,12 @@ internal static class PencilGeometry
             PencilIconKind.Loop => "M5,14 C5,4 20,1 27,10 M21,5 L27,10 21,12 M27,18 C27,28 12,31 5,22 M11,20 L5,22 11,27",
             PencilIconKind.Add => "M16,5 L16,27 M5,16 L27,16",
             PencilIconKind.Remove => "M5,16 L27,16",
+            PencilIconKind.MonitorAll => "M4,5 L28,5 28,27 4,27 Z M8,16 L14,22 24,10",
+            PencilIconKind.ExcludeAll => "M4,5 L28,5 28,27 4,27 Z M9,16 L23,16",
             PencilIconKind.Delete => "M8,10 L9,28 24,28 25,10 M5,9 L28,9 M12,8 L12,4 21,4 21,8 M14,14 L14,24 M20,14 L20,24",
             PencilIconKind.Reset => "M7,8 C15,-1 30,7 28,20 C27,32 8,33 4,21 M7,3 L7,10 14,10",
+            PencilIconKind.Edit => "M5,23 L4,28 9,27 26,10 22,6 Z M19,9 L23,13 M4,28 L28,28",
+            PencilIconKind.Apply => "M4,16 L12,24 28,7",
             PencilIconKind.Back => "M27,16 L5,16 M13,8 L5,16 13,24",
             PencilIconKind.Folder => "M3,9 L3,26 29,26 29,10 17,10 14,6 3,6 Z",
             PencilIconKind.ChevronDown => "M8,12 L16,20 24,12",
