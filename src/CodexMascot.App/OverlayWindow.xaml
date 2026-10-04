@@ -1,6 +1,7 @@
 <Window x:Class="CodexMascot.App.OverlayWindow"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:local="clr-namespace:CodexMascot.App"
  AllowsTransparency="True" Background="Transparent" WindowStyle="None" ResizeMode="NoResize"
  ShowInTaskbar="False" ShowActivated="False" Topmost="True" Width="260" Height="280">
  <Grid x:Name="MascotRoot" Background="Transparent" Margin="8">
@@ -10,5 +11,11 @@
    <StackPanel VerticalAlignment="Center"><TextBlock x:Name="FallbackEmoji" Text="★" FontSize="68" Foreground="#70D6FF" HorizontalAlignment="Center"/>
     <TextBlock x:Name="FallbackText" Foreground="White" FontSize="16" TextAlignment="Center"/></StackPanel>
   </Border>
+  <local:PencilBorder x:Name="PlacementOutline" Margin="0,18,0,0" BorderThickness="1"
+   BorderBrush="{Binding Emphasis, Source={x:Static local:PencilPalette.Current}}"
+   Background="Transparent" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="3"/>
+  <local:PencilBorder x:Name="PlacementInnerOutline" Margin="2,20,2,2" BorderThickness="1"
+   BorderBrush="{Binding Surface, Source={x:Static local:PencilPalette.Current}}"
+   Background="Transparent" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="4"/>
  </Grid>
 </Window>

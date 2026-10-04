@@ -56,12 +56,28 @@ internal static class StudioInteractionTests
                 "selected mascots show adjacent icon-only reset and apply controls with tooltips");
             check(SameImage(Control<Image>("PreviewImage").Source, LibraryDashboard.LoadThumbnail(store.CoverPath(Second(), manager))), "returning to whole scope restores the cover");
 
-            var beforeDrag = store.Snapshot(); OverlayWindow? placement = null;
+            var beforeDrag = store.Snapshot(); OverlayWindow? placement = null; Point draggedCenter = default;
             OpenPosition(dashboard, (dialog, overlay, x, y) =>
             {
                 placement = overlay;
-                var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
-                check(!panel.Children.OfType<Button>().Any() && overlay.PlacementMode && overlay.IsVisible && IsWindowEnabled(new WindowInteropHelper(overlay).Handle), "position click immediately opens an enabled drag preview without a second button");
+                var panel = PositionPanel(dialog);
+                var buttons = panel.Children.OfType<StackPanel>().Single().Children.OfType<Button>().ToArray();
+                var confirm = buttons.Single(b => b.Name == "ConfirmPositionChange");
+                var outline = (PencilBorder)overlay.FindName("PlacementOutline");
+                var innerOutline = (PencilBorder)overlay.FindName("PlacementInnerOutline");
+                check(buttons.Select(b => b.Name).SequenceEqual(new[] { "CancelPositionChange", "ConfirmPositionChange" }) &&
+                      panel.Children.OfType<StackPanel>().Single().HorizontalAlignment == HorizontalAlignment.Right &&
+                      buttons[0].IsCancel &&
+                      !confirm.IsDefault && confirm.Background == PencilPalette.Button &&
+                      confirm.Foreground == PencilPalette.OnButton && confirm.BorderBrush == PencilPalette.Button &&
+                      dialog.FontFamily == PencilFonts.Handwriting && dialog.WindowStyle == WindowStyle.None &&
+                      overlay.PlacementMode && overlay.IsVisible &&
+                      IsWindowEnabled(new WindowInteropHelper(overlay).Handle),
+                    "position dialog has handwritten OK/Cancel with the registration button color and an enabled drag preview");
+                check(outline.IsVisible && !outline.IsHitTestVisible && outline.Margin.Top == 18 &&
+                      outline.BorderThickness == new Thickness(1) && outline.BorderBrush == PencilPalette.Emphasis &&
+                      innerOutline.IsVisible && !innerOutline.IsHitTestVisible && innerOutline.BorderBrush == PencilPalette.Surface,
+                    "placement preview draws a contrasting double outline around the image without blocking dragging");
                 check(!dashboard.IsTesting, "placement mode is separate from timed playback tests");
                 var area = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
                 var p1 = new Point(area.Left + 100, area.Top + 100);
@@ -71,40 +87,59 @@ internal static class StudioInteractionTests
                 Move(overlay, p2);
                 check(new Point(x.Value, y.Value) == overlay.DesktopCenter && store.Snapshot() == beforeDrag, "continued dragging updates center coordinates without generating per-pixel saves");
                 overlay.CompletePlacementDrag();
-                check(Second().Settings(MascotState.Completed).CustomLeft == overlay.DesktopCenter.X && Second().Settings(MascotState.Completed).Position == "custom-center" && store.Library.Find(firstId)!.Settings(MascotState.Completed).CustomLeft is null, "drag release saves only inspected selected instance's center");
-                var settled = store.Snapshot();
+                draggedCenter = overlay.DesktopCenter;
+                check(store.Snapshot() == beforeDrag && new Point(x.Value, y.Value) == draggedCenter, "drag release only previews the inspected copy until OK");
                 overlay.BeginPlacementDrag(); Move(overlay, p1); Move(overlay, p2); overlay.CompletePlacementDrag();
-                check(store.Snapshot() == settled, "cancelled drag returning to start does not persist a new edit");
+                check(store.Snapshot() == beforeDrag, "cancelled drag returning to start does not persist a new edit");
                 var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
-                if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(dialog, Path.ChangeExtension(screenshot, ".live-position.png"));
+                if (!string.IsNullOrWhiteSpace(screenshot))
+                {
+                    LibraryFeatureTests.Capture(dialog, Path.ChangeExtension(screenshot, ".live-position.png"));
+                    LibraryFeatureTests.Capture(overlay, Path.ChangeExtension(screenshot, ".placement-outline.png"));
+                }
             });
             check(placement is not null && !placement.IsVisible, "closing coordinates also closes placement preview");
+            check(Second().Settings(MascotState.Completed).CustomLeft == draggedCenter.X &&
+                  Second().Settings(MascotState.Completed).Position == "custom-center" &&
+                  store.Library.Find(firstId)!.Settings(MascotState.Completed).CustomLeft is null,
+                "OK saves only the inspected selected instance's center");
             dashboard.ReplayHistory(false);
-            check(store.Snapshot() == beforeDrag, "one entire placement drag is one undo entry");
+            check(store.Snapshot() == beforeDrag, "one confirmed placement session is one undo entry");
             dashboard.ReplayHistory(true);
+            var beforeCoordinates = store.Snapshot();
             OpenPosition(dashboard, (_, overlay, x, y) =>
             {
                 x.BeginTextEdit(); x.Editor.Text = "180"; x.TryCommitText();
                 y.BeginTextEdit(); y.Editor.Text = "210"; y.TryCommitText(); Pump();
-                check(Second().Settings(MascotState.Completed).CustomLeft == 180 && Second().Settings(MascotState.Completed).CustomTop == 210, "typing coordinates automatically persists and moves placement preview");
-                var expected = OverlayWindow.PlacementBounds(LibraryStore.Placement(Second(), manager.Configuration.Global, MascotState.Completed));
-                check(overlay.DesktopPosition == new Point(expected.Left, expected.Top), "coordinate input updates the actual placement window");
+                check(store.Snapshot() == beforeCoordinates && new Point(x.Value, y.Value) == new Point(180, 210), "typing coordinates previews without saving before OK");
+                check((overlay.DesktopCenter - new Point(180, 210)).Length < 1, "coordinate input updates the actual placement window");
                 var before = store.Snapshot();
                 x.BeginPointer(0); x.MovePointer(60, false);
                 check(x.Value == 240 && Math.Abs(overlay.DesktopCenter.X - 240) < 1 && store.Snapshot() == before, "numeric coordinate drag moves preview center live without saving before release");
                 x.CancelEdit();
                 check(Math.Abs(overlay.DesktopCenter.X - 180) < 1 && store.Snapshot() == before, "cancelled coordinate scrub restores original preview center");
                 x.BeginPointer(0); x.MovePointer(30, false); x.EndPointer();
-                check(Second().Settings(MascotState.Completed).CustomLeft == 210, "coordinate scrub release persists final value");
+                check(x.Value == 210 && store.Snapshot() == before, "coordinate scrub release waits for OK to save");
             });
+            check(Second().Settings(MascotState.Completed).CustomLeft == 210 &&
+                  Second().Settings(MascotState.Completed).CustomTop == 210, "OK saves typed and scrubbed coordinates together");
             dashboard.ReplayHistory(false);
-            check(Second().Settings(MascotState.Completed).CustomLeft == 180, "coordinate scrub is one undo step");
+            check(store.Snapshot() == beforeCoordinates, "confirmed coordinate changes are one undo step");
+            dashboard.ReplayHistory(true);
+            var beforeCancel = store.Snapshot();
+            OpenPosition(dashboard, (_, overlay, x, _) =>
+            {
+                x.CommitValue(280);
+                check(Math.Abs(overlay.DesktopCenter.X - 280) < 1 && store.Snapshot() == beforeCancel,
+                    "cancelled position change still previews live");
+            }, confirm: false);
+            check(store.Snapshot() == beforeCancel, "Cancel discards the entire position edit");
             var beforeSize = store.Snapshot();
             var originalGlobalScale = manager.Configuration.Global.Scale;
             check(LibraryStore.Placement(Second(), manager.Configuration.Global, MascotState.Completed).Scale == originalGlobalScale, "legacy size inherits the existing global configuration");
             OpenPosition(dashboard, (dialog, overlay, x, y) =>
             {
-                var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
+                var panel = PositionPanel(dialog);
                 var size = panel.Children.OfType<NumericDragInput>().Single(n => n.Name == "PositionScale");
                 dialog.UpdateLayout();
                 check(size.ShowValueFill && size.Minimum == .4 && size.Maximum == 3 && size.TranslatePoint(new Point(), panel).Y > y.TranslatePoint(new Point(0, y.ActualHeight), panel).Y, "gray size bar sits below the shared X/Y row and supports 40 to 300 percent");
@@ -115,18 +150,21 @@ internal static class StudioInteractionTests
                 size.CancelEdit(); Pump();
                 check(size.Value == originalGlobalScale && store.Snapshot() == beforeSize, "cancelling size drag restores preview without saving");
                 size.BeginTextEdit(); size.Editor.Text = "160%"; size.TryCommitText(); Pump();
-                check(CustomizationManager.States.All(s => Second().Settings(s).Scale == 1.6) && Second().Scale == 1.6, "whole-scope size saves all states and the inspected copy's default");
-                check(store.Library.Find(firstId)!.Scale is null && store.Library.Installed.Single(m => m.Id == "bot").Scale is null && manager.Configuration.Global.Scale == originalGlobalScale, "size edits leave sibling copies, installed template and legacy global size unchanged");
+                check(store.Snapshot() == beforeSize && Math.Abs(overlay.Width - 260 * 1.6) < 2,
+                    "typed size previews without saving before OK");
                 var screenshot = Environment.GetEnvironmentVariable("MASCOT_LIBRARY_SCREENSHOT");
                 if (!string.IsNullOrWhiteSpace(screenshot)) LibraryFeatureTests.Capture(dialog, Path.ChangeExtension(screenshot, ".size.png"));
             });
+            check(CustomizationManager.States.All(s => Second().Settings(s).Scale == 1.6) && Second().Scale == 1.6,
+                "whole-scope OK saves all states and the inspected copy's default");
+                check(store.Library.Find(firstId)!.Scale is null && store.Library.Installed.Single(m => m.Id == "bot").Scale is null && manager.Configuration.Global.Scale == originalGlobalScale, "size edits leave sibling copies, installed template and legacy global size unchanged");
             check(new LibraryStore(file).Library.Find(secondId)!.Settings(MascotState.Completed).Scale == 1.6, "per-copy size survives save and reload");
             dashboard.ReplayHistory(false); check(store.Snapshot() == beforeSize, "size edit is one reversible history entry");
             dashboard.ReplayHistory(true); check(Second().Scale == 1.6, "redo restores size");
             Click("StateSettingsButton");
             OpenPosition(dashboard, (dialog, _, _, _) =>
             {
-                var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
+                var panel = PositionPanel(dialog);
                 panel.Children.OfType<NumericDragInput>().Single().CommitValue(.8);
             });
             check(Second().Settings(MascotState.Completed).Scale == .8 && Second().Settings(MascotState.Running).Scale == 1.6, "individual size affects only the selected event");
@@ -134,11 +172,29 @@ internal static class StudioInteractionTests
             check(Control<Button>("PositionButton").Content.ToString() == "위치 크기 변경 ??", "mixed sizes mark the placement button with double question marks");
             OpenPosition(dashboard, (dialog, _, _, _) =>
             {
-                var size = ((StackPanel)((ScrollViewer)dialog.Content).Content).Children.OfType<NumericDragInput>().Single();
+                var size = PositionPanel(dialog).Children.OfType<NumericDragInput>().Single();
                 check(size.DisplayText == "??" && size.ValueFillFraction == 0, "mixed size hides fill and displays double question marks");
                 size.CommitValue(1.2);
             });
             check(CustomizationManager.States.All(s => Second().Settings(s).Scale == 1.2), "whole-scope size unifies mixed event sizes");
+            var beforeCombined = store.Snapshot();
+            void EditPositionAndSize(Window dialog, OverlayWindow overlay, NumericDragInput x, NumericDragInput y)
+            {
+                x.CommitValue(310); y.CommitValue(220);
+                var size = PositionPanel(dialog).Children.OfType<NumericDragInput>().Single();
+                size.CommitValue(1.35); Pump();
+                check((overlay.DesktopCenter - new Point(310, 220)).Length < 1 && Math.Abs(overlay.Width - 260 * 1.35) < 2,
+                    "coordinates and size preview together before save");
+            }
+            OpenPosition(dashboard, EditPositionAndSize, confirm: false);
+            check(store.Snapshot() == beforeCombined, "Cancel discards position and size together");
+            OpenPosition(dashboard, EditPositionAndSize);
+            check(Second().CustomLeft == 310 && Second().CustomTop == 220 && Second().Scale == 1.35 &&
+                  CustomizationManager.States.All(s => Second().Settings(s).Scale == 1.35),
+                "OK saves position and size together");
+            dashboard.ReplayHistory(false);
+            check(store.Snapshot() == beforeCombined, "combined position and size are one undo entry");
+            dashboard.ReplayHistory(true);
             var installedTemplate = store.Library.Installed.Single(m => m.Id == "bot");
             installedTemplate.Volume = .62; installedTemplate.Speed = 1.4; installedTemplate.Scale = .9;
             installedTemplate.Position = "top-left"; installedTemplate.Loop = true;
@@ -279,7 +335,10 @@ internal static class StudioInteractionTests
             if (!string.IsNullOrWhiteSpace(fixture)) copies[i].For(MascotState.Completed).Image = fixture;
         }
         group.Show(store, manager, MascotState.Completed, false);
-        check(group.Windows.Count == copies.Length && group.Windows.All(w => w.IsPresenting && !w.PlacementMode), "every selected duplicate presents simultaneously in an independent locked window");
+        check(group.Windows.Count == copies.Length && group.Windows.All(w => w.IsPresenting && !w.PlacementMode &&
+              ((PencilBorder)w.FindName("PlacementOutline")).Visibility == Visibility.Collapsed &&
+              ((PencilBorder)w.FindName("PlacementInnerOutline")).Visibility == Visibility.Collapsed),
+            "normal notifications have no placement outline and present independently");
         check(group.Windows.Select(w => w.DesktopPosition).Distinct().Count() == copies.Length, "simultaneous copies use independent positions");
         check(group.Windows.Select(w => w.Width).Distinct().Count() == copies.Length, "simultaneous copies apply their independent sizes to actual playback windows");
         if (!string.IsNullOrWhiteSpace(fixture))
@@ -300,7 +359,7 @@ internal static class StudioInteractionTests
         firstWindow.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount, System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
         check(clicked == 1 && !group.IsPresenting && active.All(w => !w.IsVisible), "acknowledging a shared notification closes every window and player");
     }
-    private static void OpenPosition(LibraryDashboard dashboard, Action<Window, OverlayWindow, NumericDragInput, NumericDragInput> action)
+    private static void OpenPosition(LibraryDashboard dashboard, Action<Window, OverlayWindow, NumericDragInput, NumericDragInput> action, bool confirm = true)
     {
         Exception? failure = null;
         Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
@@ -309,16 +368,32 @@ internal static class StudioInteractionTests
             try
             {
                 var overlay = Application.Current.Windows.OfType<OverlayWindow>().Single(w => w.Owner == dialog);
-                var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
+                var panel = PositionPanel(dialog);
                 var row = panel.Children.OfType<Grid>().Single();
                 action(dialog, overlay, row.Children.OfType<NumericDragInput>().Single(t => t.Name == "PositionX"), row.Children.OfType<NumericDragInput>().Single(t => t.Name == "PositionY"));
             }
             catch (Exception e) { failure = e; }
-            finally { dialog.Close(); }
+            finally
+            {
+                if (dialog.IsVisible)
+                {
+                    var actions = panelActions(dialog);
+                    actions.Single(b => b.Name == (failure is null && confirm ? "ConfirmPositionChange" : "CancelPositionChange"))
+                        .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    if (dialog.IsVisible) dialog.Close();
+                }
+            }
         }));
         ((Button)dashboard.FindName("PositionButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         if (failure is not null) throw failure;
+        static Button[] panelActions(Window dialog)
+        {
+            var panel = PositionPanel(dialog);
+            return panel.Children.OfType<StackPanel>().Single().Children.OfType<Button>().ToArray();
+        }
     }
+    private static StackPanel PositionPanel(Window dialog)
+        => (StackPanel)((ScrollViewer)((PencilBorder)dialog.Content).Child).Content;
     private static bool SameImage(ImageSource? a, ImageSource? b) => a is not null && b is not null && Pixels(a).SequenceEqual(Pixels(b));
     private static byte[] Pixels(ImageSource source)
     {

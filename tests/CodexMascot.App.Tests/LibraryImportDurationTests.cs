@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using CodexMascot.App;
@@ -95,23 +96,65 @@ internal static class LibraryImportDurationTests
             var mediaBefore = Directory.GetFiles(store.LibraryDirectory, "*", SearchOption.AllDirectories).Length;
             OpenRegistration(dashboard, editor =>
             {
+                Descendants(editor).OfType<Button>().Single(b => b.Name == "CloseMascotButton")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                check(!editor.IsVisible && !Application.Current.Windows.OfType<Window>().Any(w => w.Title == "닫기 확인" && w.IsVisible),
+                    "closing an untouched registration needs no discard prompt");
+            });
+            OpenRegistration(dashboard, editor =>
+            {
                 var tabs = Descendants(editor).OfType<TabControl>().Single();
                 check(((TabItem)tabs.SelectedItem).Header?.ToString() == "라이브러리", "registration opens directly to simple library import");
-                var button = Descendants(editor).OfType<Button>().Single(b => b.Name == "ImportLibraryButton");
-                check(!button.IsEnabled && Descendants(editor).OfType<Border>().Any(b => b.Name == "LibraryImportDropZone" && b.AllowDrop), "registration accepts folder drops and cannot submit without a valid package");
+                var button = Descendants(editor).OfType<Button>().Single(b => b.Name == "ApplyMascotButton");
+                var actions = ((StackPanel)((ScrollViewer)((PencilBorder)editor.Content).Child).Content).Children.OfType<StackPanel>().Single();
+                check(editor.WindowStyle == WindowStyle.None && editor.FontFamily == PencilFonts.Handwriting &&
+                      actions.HorizontalAlignment == HorizontalAlignment.Right &&
+                      actions.Children.OfType<Button>().Select(b => b.Name).SequenceEqual(new[] { "CloseMascotButton", "ApplyMascotButton" }) &&
+                      !button.IsEnabled && !button.IsDefault && button.Content?.ToString() == "적용" &&
+                      button.Background == PencilPalette.Button &&
+                      Descendants(editor).OfType<Border>().Any(b => b.Name == "LibraryImportDropZone" && b.AllowDrop),
+                    "titleless registration has Close left and one Apply right, disabled until a valid library package is chosen");
                 Capture(editor, "import-empty");
                 check(editor.LoadLibrary(folder) && button.IsEnabled && Descendants(editor).OfType<TextBlock>().Any(t => t.Text == "살구 고양이"), "folder selection loads cover/name and enables registration");
                 Capture(editor, "import-ready");
                 tabs.SelectedIndex = 1; editor.UpdateLayout();
-                check(Descendants(editor).OfType<TextBox>().Any(), "manual file-by-file creation remains available on its own tab");
-                Capture(editor, "import-manual"); editor.Close();
+                check(button.IsEnabled && Descendants(editor).OfType<Button>().Count(b => b.Name == "ApplyMascotButton") == 1 &&
+                      Descendants(editor).OfType<TextBox>().Any(),
+                    "manual file-by-file creation shares the same single Apply button");
+                Capture(editor, "import-manual");
+                QueueDiscardResponse(check, false);
+                actions.Children.OfType<Button>().Single(b => b.Name == "CloseMascotButton")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                check(editor.IsVisible && editor.Result is null, "No keeps unsaved registration open");
+                QueueDiscardResponse(check, true);
+                actions.Children.OfType<Button>().Single(b => b.Name == "CloseMascotButton")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                check(!editor.IsVisible, "Yes closes unsaved registration without applying");
             });
             check(store.Snapshot() == initial && Directory.GetFiles(store.LibraryDirectory, "*", SearchOption.AllDirectories).Length == mediaBefore, "cancelling after folder preview writes no installed entry or copied assets");
             OpenRegistration(dashboard, editor =>
             {
+                var tabs = Descendants(editor).OfType<TabControl>().Single();
+                tabs.SelectedIndex = 1;
+                ((StackPanel)((TabItem)tabs.Items[1]).Content).Children.OfType<TextBox>().Single().Text = "draft mascot";
+                QueueDiscardResponse(check, true);
+                Descendants(editor).OfType<Button>().Single(b => b.Name == "CloseMascotButton")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                check(!editor.IsVisible && editor.Result is null, "typing a draft name also requires discard confirmation");
+            });
+            OpenRegistration(dashboard, editor =>
+            {
                 check(!editor.LoadLibrary(Path.GetDirectoryName(folder)!) && editor.Result is null, "invalid folder displays an error without closing the dialog");
                 check(editor.LoadLibrary(Path.Combine(folder, "mascot.json")), "valid manifest selection recovers after an error");
-                Descendants(editor).OfType<Button>().Single(b => b.Name == "ImportLibraryButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var apply = Descendants(editor).OfType<Button>().Single(b => b.Name == "ApplyMascotButton");
+                apply.Focus();
+                var enter = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(editor),
+                    Environment.TickCount, Key.Return) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+                editor.RaiseEvent(enter);
+                check(enter.Handled && editor.IsVisible && apply.RenderTransform is ScaleTransform { ScaleX: .96 },
+                    "Enter briefly presses Apply without closing registration immediately");
+                Pump(560);
+                check(!editor.IsVisible, "registration applies after the half-second Enter feedback");
             });
             var added = store.Library.Installed.Last();
             check(store.Library.Installed.Count == count + 1 && added.Id != "cat" && added.Name == "살구 고양이" && store.Library.Selected.Count == 1, "registration adds installed package without changing active selections");
@@ -213,6 +256,25 @@ internal static class LibraryImportDurationTests
         }));
         ((Button)dashboard.FindName("RegisterButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         if (failure is not null) throw failure;
+    }
+    private static void QueueDiscardResponse(Action<bool, string> check, bool discard)
+    {
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+        {
+            var dialog = Application.Current.Windows.OfType<Window>().Single(w => w.IsVisible && w.Title == "닫기 확인");
+            var frame = (PencilBorder)dialog.Content;
+            var panel = (StackPanel)((ScrollViewer)frame.Child).Content;
+            var actions = panel.Children.OfType<StackPanel>().Single();
+            check(dialog.WindowStyle == WindowStyle.None && dialog.FontFamily == PencilFonts.Handwriting &&
+                  panel.Children.OfType<TextBlock>().Single().Text == "변경 중인 작업이 있습니다. 닫으시겠습니까?" &&
+                  actions.Children.OfType<Button>().Select(b => b.Name)
+                      .SequenceEqual(new[] { "KeepMascotEditingButton", "DiscardMascotChangesButton" }) &&
+                  !actions.Children.OfType<Button>().Any(b => b.IsDefault),
+                "discard confirmation is titleless, localized and requires an explicit Yes or No");
+            actions.Children.OfType<Button>().Single(b => b.Name ==
+                (discard ? "DiscardMascotChangesButton" : "KeepMascotEditingButton"))
+                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        }));
     }
     private static void Capture(FrameworkElement element, string name)
     {

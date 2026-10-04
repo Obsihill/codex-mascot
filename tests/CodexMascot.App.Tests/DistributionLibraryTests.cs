@@ -10,6 +10,7 @@ internal static class DistributionLibraryTests
         var store = new LibraryStore(file);
         var manager = new CustomizationManager();
         check(store.Warning is null && store.Library.Installed.Select(m => m.Id).SequenceEqual(new[] { "original", "mascat" }), "release defaults contain only original images and MasCat");
+        check(store.Library.Installed.Single(m => m.Id == "original").Name == "Base mascot", "fresh library names the original artwork Base mascot");
         check(Directory.GetDirectories(store.LibraryDirectory).Length == 2 && store.Library.Selected.Single().SourceId == "mascat", "clean release creates exactly two packages with MasCat active");
         var folders = new MascotFolderLibrary(store.LibraryDirectory);
         check(store.Library.Installed.Concat(store.Library.Selected).All(m => CustomizationManager.States.All(s =>
@@ -46,5 +47,19 @@ internal static class DistributionLibraryTests
         var legacyFile = Path.Combine(dir, "distribution-legacy.json");
         var legacy = TestLibrary.Create(legacyFile);
         check(new LibraryStore(legacyFile).Library.Installed.Count == legacy.Library.Installed.Count, "changing release defaults never deletes existing user library entries");
+        check(legacy.Library.Installed.Single(m => m.Id == "original").Name == "Base mascot" &&
+              legacy.Library.Selected.Single(m => m.SourceId == "original").Name == "Base mascot",
+            "legacy Korean names migrate in both installed and selected lists");
+        legacy.Library.Installed.Single(m => m.Id == "original").Name = "Original mascot";
+        legacy.Library.Selected.Single(m => m.SourceId == "original").Name = "Original mascot";
+        legacy.Save();
+        var migrated = new LibraryStore(legacyFile);
+        check(migrated.Library.Installed.Single(m => m.Id == "original").Name == "Base mascot" &&
+              migrated.Library.Selected.Single(m => m.SourceId == "original").Name == "Base mascot",
+            "saved legacy English names migrate on load");
+        migrated.Library.Installed.Single(m => m.Id == "original").Name = "My mascot";
+        migrated.Save();
+        check(new LibraryStore(legacyFile).Library.Installed.Single(m => m.Id == "original").Name == "My mascot",
+            "a user-renamed base mascot retains its custom name");
     }
 }

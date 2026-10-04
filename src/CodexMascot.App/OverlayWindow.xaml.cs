@@ -27,6 +27,7 @@ public partial class OverlayWindow : Window
     private Point _press;
     private bool _placementDragging;
     private Point _placementStart;
+    private bool _placementMode;
     public event EventHandler? Clicked;
     public event EventHandler? PositionSaved;
     public event EventHandler? PlacementDragStarted;
@@ -39,7 +40,15 @@ public partial class OverlayWindow : Window
     internal bool HasBoostAudio => _videoAudio.IsPrepared;
     internal MascotState DisplayedState => _state;
     internal bool IsPresenting => IsVisible && !_hiding;
-    public bool PlacementMode { get; set; }
+    public bool PlacementMode
+    {
+        get => _placementMode;
+        set
+        {
+            _placementMode = value;
+            PlacementOutline.Visibility = PlacementInnerOutline.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
     internal bool HoldUntilClick => _stateConfiguration?.HoldUntilClick ?? (_state == MascotState.NeedsAttention ||
         (_state == MascotState.Completed && _global.KeepCompletedVisibleUntilClick));
     private bool ClickThrough => _global.ClickThrough && !PlacementMode && !HoldUntilClick;

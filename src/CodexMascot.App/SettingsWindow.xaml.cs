@@ -19,6 +19,7 @@ public partial class SettingsWindow : Window
     private FrameworkElement? _connection;
     private TabItem? _connectionTab;
     private ScrollViewer? _connectionHost;
+    private PencilEnterFeedback? _enterFeedback;
     internal TabControl Pages { get; private set; } = null!;
     public event EventHandler? Saved;
     public event EventHandler? PreviewChanged;
@@ -44,6 +45,7 @@ public partial class SettingsWindow : Window
     }
     private void BuildUi()
     {
+        _enterFeedback?.Dispose();
         var selected = Pages?.SelectedIndex ?? 0;
         if (_connectionHost is not null) _connectionHost.Content = null;
         if (_connectionTab is not null) _connectionTab.Content = null;
@@ -97,13 +99,14 @@ public partial class SettingsWindow : Window
         Pages.SelectedIndex = Math.Clamp(selected, 0, Pages.Items.Count - 1);
         var footer = new DockPanel { Margin = new Thickness(0, 14, 0, 0), LastChildFill = true };
         var cancel = Button(Loc.T("취소"), Close); cancel.Name = "CancelSettings"; cancel.IsCancel = true; cancel.MinWidth = 100;
-        var confirm = Button(Loc.T("확인"), Accept); confirm.Name = "ConfirmSettings"; confirm.IsDefault = true; confirm.MinWidth = 100;
+        var confirm = Button(Loc.T("확인"), Accept); confirm.Name = "ConfirmSettings"; confirm.MinWidth = 100;
         confirm.SetBinding(BackgroundProperty, new Binding(nameof(PencilThemeColors.Button)) { Source = PencilPalette.Current });
         confirm.SetBinding(ForegroundProperty, new Binding(nameof(PencilThemeColors.OnButton)) { Source = PencilPalette.Current });
         confirm.SetBinding(BorderBrushProperty, new Binding(nameof(PencilThemeColors.Button)) { Source = PencilPalette.Current });
         DockPanel.SetDock(cancel, Dock.Right); DockPanel.SetDock(confirm, Dock.Right);
-        footer.Children.Add(cancel); footer.Children.Add(confirm); footer.Children.Add(_feedback);
+        footer.Children.Add(confirm); footer.Children.Add(cancel); footer.Children.Add(_feedback);
         Grid.SetRow(footer, 1); Root.Children.Add(footer);
+        _enterFeedback = PencilEnterFeedback.Attach(this, confirm);
     }
     internal void DetachConnection()
     {

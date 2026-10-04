@@ -37,7 +37,11 @@ internal static class SettingsTransactionTests
             {
                 AppTheme.Apply(isDark); Pump();
                 var ok = Children(window).OfType<Button>().Single(b => b.Name == "ConfirmSettings");
-                check(ReferenceEquals(ok.Background, PencilPalette.Current.Button) && ReferenceEquals(ok.Foreground, PencilPalette.Current.OnButton), "OK uses registration button colors in both themes");
+                var footer = ((Grid)window.Content).Children.OfType<DockPanel>().Single();
+                check(ReferenceEquals(ok.Background, PencilPalette.Current.Button) && ReferenceEquals(ok.Foreground, PencilPalette.Current.OnButton) &&
+                      !ok.IsDefault && ((Button)footer.Children[0]).Name == "ConfirmSettings" &&
+                      ((Button)footer.Children[1]).Name == "CancelSettings",
+                    "OK uses registration colors, sits right of Cancel and is handled by animated Enter in both themes");
             }
             global.StartWithWindows = !startup; global.AlwaysOnTop = !top;
             var saves = 0; window.Saved += (_, _) => saves++;
@@ -76,7 +80,9 @@ internal static class SettingsTransactionTests
                 var pickerActions = (StackPanel)pickerSummary.Children[1];
                 check(selector.Title == "감시 프로젝트 선택" && ReferenceEquals(pickerFooter.Children[1], selector.AutoInclude) &&
                       selector.AutoInclude.HorizontalAlignment == HorizontalAlignment.Left &&
-                      DockPanel.GetDock(pickerButtons) == Dock.Right && pickerButtons.Children.IndexOf(selector.Confirm) == 0,
+                      DockPanel.GetDock(pickerButtons) == Dock.Right &&
+                      pickerButtons.Children.IndexOf(selector.Cancel) == 0 &&
+                      pickerButtons.Children.IndexOf(selector.Confirm) == 1 && !selector.Confirm.IsDefault,
                     "picker title and bottom-left auto-monitor checkbox sit beside right-aligned confirmation buttons");
                 check(ReferenceEquals(pickerSummary.Children[0], pickerSummary.Children.OfType<TextBlock>().Single()) &&
                       Grid.GetColumn(pickerActions) == 1 && pickerActions.HorizontalAlignment == HorizontalAlignment.Right &&

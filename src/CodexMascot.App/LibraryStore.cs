@@ -5,6 +5,7 @@ namespace CodexMascot.App;
 
 public sealed class LibraryStore
 {
+    internal const string BaseMascotName = "Base mascot";
     private readonly string _path;
     private readonly MascotFolderLibrary _folders;
     public string LibraryDirectory => _folders.Root;
@@ -40,6 +41,8 @@ public sealed class LibraryStore
         Library.Selected = Library.Selected.Where(m => m is not null && Library.Installed.Any(p => p.Id == m.SourceId)).DistinctBy(m => m.Id).ToList();
         foreach (var m in Library.Installed.Concat(Library.Selected))
         {
+            if ((m.SourceId ?? m.Id) == "original" && m.Name is ("기존 마스코트" or "Original mascot"))
+                m.Name = BaseMascotName;
             m.Events ??= new();
             m.States ??= new();
             // Expand old single-file entries without losing their selection or options.
@@ -125,7 +128,7 @@ public sealed class LibraryStore
     {
         var library = new MascotLibrary { AudioLayoutVersion = 1 };
         var installedAt = DateTimeOffset.UtcNow;
-        library.Installed.Add(new() { Id = "original", Name = Loc.T("기존 마스코트"), InstalledAt = installedAt, Position = g.Position, MonitorDevice = g.MonitorDevice,
+        library.Installed.Add(new() { Id = "original", Name = BaseMascotName, InstalledAt = installedAt, Position = g.Position, MonitorDevice = g.MonitorDevice,
             CustomLeft = g.CustomLeft, CustomTop = g.CustomTop, CoverImage = "assets/images/main.png", States = ImageStates("assets/images"),
             Events = new() { "idle", "running", "needsAttention", "completed", "failed", "interrupted" } });
         library.Installed.Add(new() { Id = "mascat", Name = "MasCat", InstalledAt = installedAt,

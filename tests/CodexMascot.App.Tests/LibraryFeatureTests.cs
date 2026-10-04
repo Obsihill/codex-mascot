@@ -128,7 +128,8 @@ internal static class LibraryFeatureTests
             Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() =>
             {
                 var dialog = Application.Current.Windows.OfType<Window>().Single(w => w.Title == "위치 크기 변경");
-                var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
+                check(dialog.WindowStyle == WindowStyle.None, "position dialog has no title bar or close button");
+                var panel = (StackPanel)((ScrollViewer)((PencilBorder)dialog.Content).Child).Content;
                 check(!panel.Children.OfType<ComboBox>().Any(), "position dialog has no monitor or preset selectors");
                 var row = panel.Children.OfType<Grid>().Single();
                 var x = row.Children.OfType<NumericDragInput>().Single(t => t.Name == "PositionX");
@@ -137,7 +138,8 @@ internal static class LibraryFeatureTests
                 dialog.UpdateLayout();
                 check(Math.Abs(x.TranslatePoint(new Point(), row).Y - y.TranslatePoint(new Point(), row).Y) < .1 && Grid.GetColumn(x) < Grid.GetColumn(y), "X and Y inputs share one horizontal row");
                 CaptureDialog(dialog, "position");
-                dialog.Close();
+                panel.Children.OfType<StackPanel>().Single().Children.OfType<Button>().Single(b => b.Name == "ConfirmPositionChange")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }));
             ((Button)dashboard.FindName("PositionButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             var positioned = new LibraryStore(file).Library.Installed.Single(m => m.Id == "ghost");

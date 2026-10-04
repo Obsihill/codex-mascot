@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Text.Json;
 using CodexMascot.Core;
@@ -17,8 +18,10 @@ internal sealed class MascotPackageEditor : Window
     private readonly TextBlock _error = new() { Foreground = PencilPalette.Danger, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 12) };
     private readonly Image _libraryPreview = new() { Width = 140, Height = 126, Stretch = Stretch.Uniform, Margin = new Thickness(0, 12, 0, 8) };
     private readonly TextBlock _libraryName = new() { TextAlignment = TextAlignment.Center, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 0, 0, 16) };
-    private readonly Button _importButton = new() { Name = "ImportLibraryButton", Content = Loc.T("등록"), IsEnabled = false, Margin = new Thickness(0, 12, 0, 0) };
+    private readonly Button _confirmButton = new() { Name = "ApplyMascotButton", MinWidth = 100 };
+    private TabControl? _registrationTabs;
     private string? _librarySource;
+    private bool _applied, _discardConfirmed;
     public LibraryMascot? Result { get; private set; }
     public MascotPackageEditor(CustomizationManager manager, LibraryMascot? original)
     {
@@ -29,18 +32,34 @@ internal sealed class MascotPackageEditor : Window
         ResizeMode = ResizeMode.NoResize; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = PencilPalette.Paper; Foreground = PencilPalette.Ink;
         Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/AgentMascot;component/PencilTheme.xaml", UriKind.Relative) });
-        PencilWindow.Apply(this);
-        Pencil.SetIcon(_importButton, PencilIconKind.Add);
+        if (original is null)
+        {
+            WindowStyle = WindowStyle.None;
+            Loaded += (_, _) => PencilPalette.BindTree(this);
+            Closing += Registration_Closing;
+            PencilEnterFeedback.Attach(this, _confirmButton);
+        }
+        else PencilWindow.Apply(this);
+        _confirmButton.Content = Loc.T(original is null ? "적용" : "저장");
+        _confirmButton.Background = PencilPalette.Button;
+        _confirmButton.Foreground = PencilPalette.OnButton;
+        _confirmButton.BorderBrush = PencilPalette.Button;
         var root = new StackPanel { Margin = new Thickness(24) };
-        Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var scroller = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        Content = original is null ? new PencilBorder { Child = scroller, Background = PencilPalette.Paper,
+            BorderBrush = PencilPalette.Line, BorderThickness = new Thickness(1) } : scroller;
         var panel = new StackPanel { Margin = new Thickness(8, 16, 8, 0) };
         if (original is null)
         {
-            var tabs = new TabControl { Name = "RegistrationTabs" };
-            tabs.Items.Add(new TabItem { Header = Loc.T("라이브러리"), Content = BuildLibraryPanel() });
-            tabs.Items.Add(new TabItem { Header = Loc.T("직접 만들기"), Content = panel });
-            tabs.SelectionChanged += (_, _) => _error.Text = "";
-            root.Children.Add(tabs);
+            _registrationTabs = new TabControl { Name = "RegistrationTabs" };
+            _registrationTabs.Items.Add(new TabItem { Header = Loc.T("라이브러리"), Content = BuildLibraryPanel() });
+            _registrationTabs.Items.Add(new TabItem { Header = Loc.T("직접 만들기"), Content = panel });
+            _registrationTabs.SelectionChanged += (_, e) =>
+            {
+                if (!ReferenceEquals(e.Source, _registrationTabs)) return;
+                _error.Text = ""; RefreshConfirmAvailability();
+            };
+            root.Children.Add(_registrationTabs);
         }
         else root.Children.Add(panel);
         panel.Children.Add(new TextBlock { Text = Loc.T("이름") }); _name.Text = original?.Name ?? ""; panel.Children.Add(_name);
@@ -50,15 +69,63 @@ internal sealed class MascotPackageEditor : Window
             AddSlot(panel, MascotConfiguration.StateKey(state), MainWindow.StateName(state), original?.For(state).Image);
             AddSoundSlot(panel, MascotConfiguration.StateKey(state) + ".sound", original?.For(state).SoundCandidates().ToArray() ?? Array.Empty<string>());
         }
-        var save = new Button { Content = original is null ? Loc.T("등록") : Loc.T("저장") };
-        Pencil.SetIcon(save, PencilIconKind.Add);
-        save.Click += (_, _) =>
+        _confirmButton.Click += (_, _) =>
         {
-            try { Result = BuildPackage(_name.Text, _paths, _changed, _manager, _original, _soundChoices); DialogResult = true; }
-            catch (Exception ex) { _error.Text = ex.Message; }
+            try
+            {
+                Result = _registrationTabs?.SelectedIndex == 0
+                    ? _librarySource is null ? null : MascotFolderImport.Read(_librarySource)
+                    : BuildPackage(_name.Text, _paths, _changed, _manager, _original, _soundChoices);
+                if (Result is not null) { _applied = true; DialogResult = true; }
+            }
+            catch (Exception ex) { _applied = false; _error.Text = ex.Message; }
         };
-        panel.Children.Add(save);
         root.Children.Add(_error);
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 12, 0, 0) };
+        if (original is null)
+        {
+            var close = new Button { Name = "CloseMascotButton", Content = Loc.T("닫기"), MinWidth = 100,
+                Margin = new Thickness(0, 0, 8, 0) };
+            close.Click += (_, _) => Close();
+            actions.Children.Add(close);
+        }
+        actions.Children.Add(_confirmButton); root.Children.Add(actions);
+        RefreshConfirmAvailability();
+    }
+    private bool HasPendingRegistrationChanges()
+        => _librarySource is not null || !string.IsNullOrEmpty(_name.Text) || _changed.Count > 0;
+
+    private void Registration_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_applied || _discardConfirmed || !HasPendingRegistrationChanges()) return;
+        if (!ConfirmDiscard()) { e.Cancel = true; return; }
+        _discardConfirmed = true;
+    }
+
+    private bool ConfirmDiscard()
+    {
+        var dialog = new Window { Title = Loc.T("닫기 확인"), Width = 420, SizeToContent = SizeToContent.Height,
+            ResizeMode = ResizeMode.NoResize, WindowStyle = WindowStyle.None, ShowInTaskbar = false,
+            Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            FontFamily = PencilFonts.Handwriting, FontSize = 20,
+            Background = PencilPalette.Paper, Foreground = PencilPalette.Ink, Resources = Resources };
+        var panel = new StackPanel { Margin = new Thickness(24) };
+        panel.Children.Add(new TextBlock { Text = Loc.T("변경 중인 작업이 있습니다. 닫으시겠습니까?"),
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 20) });
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var no = new Button { Name = "KeepMascotEditingButton", Content = Loc.T("아니요"), IsCancel = true,
+            MinWidth = 100, Margin = new Thickness(0, 0, 8, 0) };
+        var yes = new Button { Name = "DiscardMascotChangesButton", Content = Loc.T("네"), MinWidth = 100,
+            Background = PencilPalette.Button, Foreground = PencilPalette.OnButton, BorderBrush = PencilPalette.Button };
+        no.Click += (_, _) => dialog.DialogResult = false;
+        yes.Click += (_, _) => dialog.DialogResult = true;
+        actions.Children.Add(no); actions.Children.Add(yes); panel.Children.Add(actions);
+        dialog.Content = new PencilBorder { Child = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
+            Background = PencilPalette.Paper, BorderBrush = PencilPalette.Line, BorderThickness = new Thickness(1) };
+        dialog.PreviewKeyDown += (_, e) => { if (e.Key is Key.Return or Key.Enter) e.Handled = true; };
+        dialog.Loaded += (_, _) => PencilPalette.BindTree(dialog);
+        return dialog.ShowDialog() == true;
     }
     private FrameworkElement BuildLibraryPanel()
     {
@@ -84,23 +151,20 @@ internal sealed class MascotPackageEditor : Window
             if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } files) LoadLibrary(files[0]);
             else _error.Text = Loc.T("마스코트 폴더를 하나씩 선택하세요.");
         };
-        panel.Children.Add(drop); panel.Children.Add(_importButton);
-        _importButton.Click += (_, _) =>
-        {
-            if (_librarySource is null) return;
-            try { Result = MascotFolderImport.Read(_librarySource); DialogResult = true; }
-            catch (Exception ex) { _error.Text = ex.Message; }
-        };
+        panel.Children.Add(drop);
         return panel;
     }
+    private void RefreshConfirmAvailability()
+        => _confirmButton.IsEnabled = _registrationTabs is null || _registrationTabs.SelectedIndex > 0 ||
+            _registrationTabs.SelectedIndex == 0 && _librarySource is not null;
     internal bool LoadLibrary(string path)
     {
-        _librarySource = null; _importButton.IsEnabled = false; _libraryPreview.Source = null; _libraryName.Text = ""; _error.Text = "";
+        _librarySource = null; RefreshConfirmAvailability(); _libraryPreview.Source = null; _libraryName.Text = ""; _error.Text = "";
         try
         {
             var mascot = MascotFolderImport.Read(path);
             _libraryPreview.Source = LibraryDashboard.LoadThumbnail(mascot.CoverImage);
-            _libraryName.Text = mascot.Name; _librarySource = path; _importButton.IsEnabled = true; return true;
+            _libraryName.Text = mascot.Name; _librarySource = path; RefreshConfirmAvailability(); return true;
         }
         catch (Exception ex) { _error.Text = ex.Message; return false; }
     }

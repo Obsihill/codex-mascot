@@ -122,13 +122,16 @@ public partial class LibraryDashboard
         panel.Children.Add(new TextBlock { Text = Loc.T(message), TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 20) });
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var cancel = new Button { Name = "CancelSettingsChange", Content = Loc.T("취소"), IsCancel = true, IsDefault = true,
+        var cancel = new Button { Name = "CancelSettingsChange", Content = Loc.T("취소"), IsCancel = true,
             Margin = new Thickness(0, 0, 8, 0) };
         var confirm = new Button { Name = "ConfirmSettingsChange", Content = Loc.T("확인") };
+        confirm.Background = PencilPalette.Button; confirm.Foreground = PencilPalette.OnButton; confirm.BorderBrush = PencilPalette.Button;
         cancel.Click += (_, _) => Window.GetWindow(cancel)!.DialogResult = false;
         confirm.Click += (_, _) => Window.GetWindow(confirm)!.DialogResult = true;
         actions.Children.Add(cancel); actions.Children.Add(confirm); panel.Children.Add(actions);
-        return Dialog(Loc.T(title), panel).ShowDialog() == true;
+        var window = Dialog(Loc.T(title), panel, showCaption: false);
+        window.PreviewKeyDown += (_, e) => { if (e.Key is Key.Return or Key.Enter) e.Handled = true; };
+        return window.ShowDialog() == true;
     }
     private void EditMascot_OnClick(object sender, RoutedEventArgs e)
     {
@@ -273,6 +276,51 @@ public partial class LibraryDashboard
             if (state is null) { m.Position = "custom-center"; m.MonitorDevice = null; m.CustomLeft = x; m.CustomTop = y; }
         });
         RefreshInspector(); return result || states.All(s => m.Settings(s).CustomLeft == x && m.Settings(s).CustomTop == y);
+    }
+    internal bool SavePlacement(string id, MascotState? state, double? scale, Point? center)
+    {
+        var m = _store.Library.Find(id);
+        if (m is null || scale is { } value && !double.IsFinite(value) ||
+            center is { } point && (!double.IsFinite(point.X) || !double.IsFinite(point.Y))) return false;
+        if (scale is null && center is null) return true;
+        var states = state is { } selectedState ? new[] { selectedState } : CustomizationManager.States;
+        var label = scale is not null && center is not null ? " · 위치/크기 변경"
+            : scale is not null ? " · 크기 변경" : " · 위치 변경";
+        var result = Commit(DisplayName(m) + " · " + (state is { } st ? MainWindow.StateName(st) : Loc.T("전체")) + Loc.T(label), () =>
+        {
+            foreach (var s in states)
+            {
+                var settings = m.Settings(s);
+                if (center is { } position)
+                {
+                    settings.Position = "custom-center"; settings.MonitorDevice = null;
+                    settings.CustomLeft = position.X; settings.CustomTop = position.Y;
+                }
+                else if (scale is not null && settings.Position != "custom-center")
+                {
+                    var anchorCenter = OverlayWindow.PlacementCenter(LibraryStore.Placement(m, _manager.Configuration.Global, s));
+                    settings.Position = "custom-center"; settings.MonitorDevice = null;
+                    settings.CustomLeft = anchorCenter.X; settings.CustomTop = anchorCenter.Y;
+                }
+                if (scale is { } size) settings.Scale = Math.Clamp(size, .4, 3);
+            }
+            if (state is null)
+            {
+                if (center is { } position)
+                {
+                    m.Position = "custom-center"; m.MonitorDevice = null;
+                    m.CustomLeft = position.X; m.CustomTop = position.Y;
+                }
+                else if (scale is not null && m.Position != "custom-center")
+                {
+                    var anchorCenter = OverlayWindow.PlacementCenter(LibraryStore.Placement(m, _manager.Configuration.Global));
+                    m.Position = "custom-center"; m.MonitorDevice = null;
+                    m.CustomLeft = anchorCenter.X; m.CustomTop = anchorCenter.Y;
+                }
+                if (scale is { } size) m.Scale = Math.Clamp(size, .4, 3);
+            }
+        });
+        RefreshInspector(); return result;
     }
     private void ApplyPanelRatio()
     {

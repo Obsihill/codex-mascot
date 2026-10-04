@@ -128,6 +128,31 @@ internal static class PencilThemeTests
         EditableDropdown(check);
         SharedControls(check);
         ScrollBars(check);
+        KeyboardSubmitFeedback(check);
+    }
+
+    private static void KeyboardSubmitFeedback(Action<bool, string> check)
+    {
+        var button = new Button { Content = "확인", Background = PencilPalette.Button, BorderBrush = PencilPalette.Button };
+        var window = new Window { Content = button, Width = 220, Height = 100, ShowInTaskbar = false, ShowActivated = false };
+        var feedback = PencilEnterFeedback.Attach(window, button);
+        var clicks = 0;
+        button.Click += (_, _) => clicks++;
+        try
+        {
+            window.Show(); Pump();
+            feedback.Play();
+            check(clicks == 0 && button.RenderTransform is ScaleTransform { ScaleX: .96, ScaleY: .96 } &&
+                  button.BorderBrush == PencilPalette.Emphasis,
+                "Enter submission shows a pressed button before applying");
+            Pump(300);
+            check(clicks == 1 && button.Background == PencilPalette.Button && button.BorderBrush == PencilPalette.Button &&
+                  button.RenderTransform is not ScaleTransform { ScaleX: .96 },
+                "Enter submission clicks once after the 0.2-second pressed effect and restores the button");
+            feedback.Play(); window.Close(); Pump(300);
+            check(clicks == 1, "closing during keyboard feedback cancels the delayed click");
+        }
+        finally { if (window.IsVisible) window.Close(); }
     }
 
     private static void CheckCardZoom(Action<bool, string> check, ListBoxItem item, PencilBorder body, Image cover, TextBlock caption, Button action, string name)
@@ -354,13 +379,19 @@ internal static class PencilThemeTests
         }
     }
 
-    private static void Pump()
+    private static void Pump(int ms = 0)
     {
         var context = SynchronizationContext.Current;
         try
         {
             var frame = new DispatcherFrame();
-            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => frame.Continue = false));
+            if (ms == 0) Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => frame.Continue = false));
+            else
+            {
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
+                timer.Start();
+            }
             Dispatcher.PushFrame(frame);
         }
         finally { SynchronizationContext.SetSynchronizationContext(context); }

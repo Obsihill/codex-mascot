@@ -376,14 +376,19 @@ public partial class LibraryDashboard : UserControl
     }
     private void Settings_OnClick(object sender, RoutedEventArgs e) { StopTest(); SettingsRequested?.Invoke(this, EventArgs.Empty); }
     private void Projects_OnClick(object sender, RoutedEventArgs e) => ProjectsRequested?.Invoke(this, EventArgs.Empty);
-    private Window Dialog(string title, StackPanel panel)
+    private Window Dialog(string title, StackPanel panel, bool showCaption = true)
     {
         _editorDialog?.Close();
         var window = new Window { Title = title, Width = 420, SizeToContent = SizeToContent.Height, MaxHeight = SystemParameters.WorkArea.Height - 40,
             ResizeMode = ResizeMode.NoResize, Owner = Window.GetWindow(this), WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = PencilPalette.Paper, Foreground = PencilPalette.Ink, Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
+            FontFamily = PencilFonts.Handwriting, FontSize = 20, ShowInTaskbar = false,
+            Background = PencilPalette.Paper, Foreground = PencilPalette.Ink };
+        var scroller = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        window.Content = showCaption ? scroller : new PencilBorder { Child = scroller,
+            Background = PencilPalette.Paper, BorderBrush = PencilPalette.Line, BorderThickness = new Thickness(1) };
         window.Resources = Resources; window.PreviewKeyDown += History_OnKeyDown;
-        PencilWindow.Apply(window);
+        if (showCaption) PencilWindow.Apply(window);
+        else { window.WindowStyle = WindowStyle.None; window.Loaded += (_, _) => PencilPalette.BindTree(window); }
         _editorDialog = window; window.Closed += (_, _) => _editorDialog = null; return window;
     }
 }

@@ -82,7 +82,7 @@ internal static class LibrarySoundTests
         var editor = new MascotPackageEditor(manager, null) { ShowActivated = false, ShowInTaskbar = false };
         try
         {
-            var tabs = ((StackPanel)((ScrollViewer)editor.Content).Content).Children.OfType<TabControl>().Single();
+            var tabs = ((StackPanel)((ScrollViewer)((PencilBorder)editor.Content).Child).Content).Children.OfType<TabControl>().Single();
             tabs.SelectedIndex = 1; editor.Show(); editor.UpdateLayout();
             var panel = (StackPanel)((TabItem)tabs.Items[1]).Content;
             check(panel.Children.OfType<DockPanel>().SelectMany(p => p.Children.OfType<Button>()).Count(b => b.Name.EndsWith("_soundPick")) == 6, "direct registration offers one sound picker per state");

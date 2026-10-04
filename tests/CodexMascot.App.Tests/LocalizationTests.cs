@@ -46,15 +46,18 @@ internal static class LocalizationTests
                     Regex.Matches(pair.Value, @"\{\d+\}").Select(m => m.Value).Order()), "translation preserves placeholders: " + pair.Key);
             }
             check(Loc.F("{0} 추가", "내 고양이") == "Add 내 고양이", "formatting preserves user-provided names");
+            check(Loc.T(" · 위치/크기 변경") == " · Move & resize" &&
+                  Loc.T("위치와 크기를 저장하지 못했습니다.") == "Could not save the position and size.",
+                "position dialog's newer actions and errors have English translations");
             check(Loc.CoreMessage("Codex 기록 감시 중 · 목록은 최근 100개 기록 기준") == "Codex logs monitored · Showing the latest 100 logs", "core health messages translate without changing event records");
             check(MainWindow.StateName(MascotState.NeedsAttention) == "Needs attention", "notification state is localized");
             var typeface = new Typeface(PencilFonts.Handwriting, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
             check(typeface.TryGetGlyphTypeface(out var glyphs) && Enumerable.Range(32, 95).All(c => glyphs.CharacterToGlyphMap.ContainsKey(c)), "embedded handwriting font covers printable English characters");
 
             var store = TestLibrary.Create(Path.Combine(dir, "english-library.json"));
-            var names = new[] { "Original mascot", "Mint bot", "Apricot cat", "Lilac ghost", "Lemon star", "Sprout", "Blue jelly" };
+            var names = new[] { "Base mascot", "Mint bot", "Apricot cat", "Lilac ghost", "Lemon star", "Sprout", "Blue jelly" };
             for (var i = 0; i < store.Library.Installed.Count; i++) store.Library.Installed[i].Name = names[i];
-            foreach (var entry in store.Library.Selected) entry.Name = "Original mascot";
+            foreach (var entry in store.Library.Selected) entry.Name = "Base mascot";
             var snapshot = store.Snapshot();
             dashboard = new LibraryDashboard(); dashboard.Initialize(store, manager);
             host = new Window { Content = dashboard, Width = 1220, Height = 900, ShowActivated = false, ShowInTaskbar = false };
@@ -94,7 +97,12 @@ internal static class LocalizationTests
             check(store.Snapshot() == snapshot, "live language changes preserve mascot names and preferences");
             editor = new MascotPackageEditor(manager, null) { ShowActivated = false }; editor.Show(); Pump(editor);
             check(editor.Title == "Add mascot", "registration dialog is localized");
-            check(editor.FontFamily == PencilFonts.Handwriting, "registration uses the bundled handwriting font");
+            check(editor.FontFamily == PencilFonts.Handwriting && editor.WindowStyle == WindowStyle.None &&
+                  Descendants<Button>(editor).Single(b => b.Name == "ApplyMascotButton").Content?.ToString() == "Apply" &&
+                  Descendants<Button>(editor).Single(b => b.Name == "CloseMascotButton").Content?.ToString() == "Close" &&
+                  Loc.T("변경 중인 작업이 있습니다. 닫으시겠습니까?") == "You have unsaved work. Close without applying it?" &&
+                  Loc.T("네") == "Yes" && Loc.T("아니요") == "No",
+                "titleless registration and discard choices use the embedded font and English translations");
             var registrationTabs = Descendants<TabControl>(editor).Single();
             check(ReferenceEquals(registrationTabs.Background, PencilPalette.Surface), "registration tab content uses the dark surface");
             Capture(editor, "register-english");

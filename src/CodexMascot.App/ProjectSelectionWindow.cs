@@ -46,12 +46,12 @@ internal sealed class ProjectSelectionWindow : Window
         var root = new DockPanel { Margin = new Thickness(24) };
         var footer = new DockPanel { LastChildFill = true };
         var footerButtons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        Confirm = new Button { Content = Loc.T("확인"), IsDefault = true, MinWidth = 100, Margin = new Thickness(4) };
+        Confirm = new Button { Content = Loc.T("확인"), MinWidth = 100, Margin = new Thickness(4) };
         Confirm.SetBinding(BackgroundProperty, new Binding(nameof(PencilThemeColors.Button)) { Source = PencilPalette.Current });
         Confirm.SetBinding(ForegroundProperty, new Binding(nameof(PencilThemeColors.OnButton)) { Source = PencilPalette.Current });
         Confirm.SetBinding(BorderBrushProperty, new Binding(nameof(PencilThemeColors.Button)) { Source = PencilPalette.Current });
         Cancel = new Button { Content = Loc.T("취소"), IsCancel = true, MinWidth = 100, Margin = new Thickness(4) };
-        footerButtons.Children.Add(Confirm); footerButtons.Children.Add(Cancel);
+        footerButtons.Children.Add(Cancel); footerButtons.Children.Add(Confirm);
         DockPanel.SetDock(footerButtons, Dock.Right); footer.Children.Add(footerButtons);
         AutoInclude = new CheckBox { Content = Loc.T("새 채팅 자동 감시"), IsChecked = monitor.AutoIncludeNewChats,
             HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center };
@@ -61,6 +61,7 @@ internal sealed class ProjectSelectionWindow : Window
         options.Children.Add(new TextBlock { Text = Loc.T("폴더를 펼쳐 채팅별 감시를 선택하세요. 새 채팅 자동 감시를 끄면 직접 체크한 채팅만 감시합니다."), TextWrapping = TextWrapping.Wrap, Foreground = PencilPalette.Muted, Margin = new Thickness(0, 0, 0, 12) });
         RecentLimit = new NumericDragInput { Label = Loc.T("최근 기록 수 (에이전트별)"), Icon = PencilIconKind.Duration, ShowValueFill = true,
             Minimum = 1, Maximum = 1000, DecimalPlaces = 0, Value = monitor.RecentSessionLimit, UnitsPerPixel = 1 };
+        PencilEnterFeedback.Attach(this, Confirm, () => !RecentLimit.IsEditing);
         options.Children.Add(RecentLimit);
         AutoInclude.Checked += (_, _) => PreviewSelection();
         AutoInclude.Unchecked += (_, _) => PreviewSelection();

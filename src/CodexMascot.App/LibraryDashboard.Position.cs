@@ -35,10 +35,29 @@ public partial class LibraryDashboard
             IsMixed = scope is null && CustomizationManager.States.Select(s => m.Settings(s).Scale ?? _manager.Configuration.Global.Scale).Distinct().Count() > 1
         };
         panel.Children.Add(scale);
-        var window = Dialog(Loc.T("위치 크기 변경"), panel);
+        var window = Dialog(Loc.T("위치 크기 변경"), panel, showCaption: false);
         var error = new TextBlock { Foreground = PencilPalette.Danger, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
         panel.Children.Add(error);
         OverlayWindow? overlay = null;
+        var globalScale = scale.Value;
+        var mixedScale = scale.IsMixed;
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
+        var cancel = new Button { Name = "CancelPositionChange", Content = Loc.T("취소"), IsCancel = true, MinWidth = 100, Margin = new Thickness(0, 0, 8, 0) };
+        var confirm = new Button { Name = "ConfirmPositionChange", Content = Loc.T("확인"), MinWidth = 100 };
+        confirm.Background = PencilPalette.Button; confirm.Foreground = PencilPalette.OnButton; confirm.BorderBrush = PencilPalette.Button;
+        PencilEnterFeedback.Attach(window, confirm, () => !x.IsEditing && !y.IsEditing && !scale.IsEditing);
+        cancel.Click += (_, _) => window.DialogResult = false;
+        confirm.Click += (_, _) =>
+        {
+            FinishInputs(); overlay?.CompletePlacementDrag();
+            var changedScale = !scale.IsMixed && (scale.Value != globalScale || mixedScale);
+            var changedPosition = x.Value != center.X || y.Value != center.Y;
+            if ((changedScale || changedPosition) && !SavePlacement(m.Id, scope,
+                    changedScale ? scale.Value : null, changedPosition ? new Point(x.Value, y.Value) : null))
+            { error.Text = Loc.T("위치와 크기를 저장하지 못했습니다."); error.Visibility = Visibility.Visible; return; }
+            window.DialogResult = true;
+        };
+        actions.Children.Add(cancel); actions.Children.Add(confirm); panel.Children.Add(actions);
         void UpdateCoordinates(Point point)
         {
             x.Value = point.X; y.Value = point.Y; error.Visibility = Visibility.Collapsed;
@@ -47,12 +66,6 @@ public partial class LibraryDashboard
         {
             global.Position = "custom-center"; global.CustomLeft = x.Value; global.CustomTop = y.Value; global.MonitorDevice = null;
             overlay?.ApplyGlobal(global);
-        }
-        void CommitCoordinates()
-        {
-            if (!SavePosition(m.Id, scope, x.Value, y.Value))
-            { error.Text = Loc.T("위치를 저장하지 못했습니다."); error.Visibility = Visibility.Visible; }
-            else error.Visibility = Visibility.Collapsed;
         }
         void FinishInputs()
         {
@@ -64,14 +77,7 @@ public partial class LibraryDashboard
             global.Scale = scale.Value;
             overlay?.ApplyGlobal(global);
         };
-        scale.ValueCommitted += (_, _) =>
-        {
-            if (!SaveScale(m.Id, scope, scale.Value))
-            { error.Text = Loc.T("크기를 저장하지 못했습니다."); error.Visibility = Visibility.Visible; }
-            else error.Visibility = Visibility.Collapsed;
-        };
         x.ValuePreviewed += (_, _) => PreviewCoordinates(); y.ValuePreviewed += (_, _) => PreviewCoordinates();
-        x.ValueCommitted += (_, _) => CommitCoordinates(); y.ValueCommitted += (_, _) => CommitCoordinates();
         window.Loaded += (_, _) =>
         {
             // Create after ShowDialog disables other windows, so both this dialog and
@@ -80,11 +86,6 @@ public partial class LibraryDashboard
             overlay.ApplyGlobal(global);
             overlay.PlacementDragStarted += (_, _) => FinishInputs();
             overlay.PlacementPositionChanged += (_, point) => UpdateCoordinates(point);
-            overlay.PositionSaved += (_, _) =>
-            {
-                if (!SavePosition(m.Id, scope, global.CustomLeft ?? 0, global.CustomTop ?? 0))
-                { error.Text = Loc.T("위치를 저장하지 못했습니다."); error.Visibility = Visibility.Visible; }
-            };
             var config = scope is null ? new StateConfiguration() : LibraryStore.Playback(m, state, _manager.Configuration.For(state));
             config.ShowDurationMs = 0; config.Volume = 0;
             var path = scope is null ? _store.CoverPath(m, _manager) : _store.MediaPath(m, _manager, state);
