@@ -37,5 +37,7 @@
     <Content Include="..\..\README.md" Link="README.md" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\VALIDATION.md" Link="VALIDATION.md" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Ship the guide and README images so links work inside the release ZIP. -->
+    <Content Include="..\..\docs\**\*" Link="docs\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
