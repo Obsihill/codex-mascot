@@ -5,7 +5,7 @@
     <RootNamespace>CodexMascot.App</RootNamespace>
     <AssemblyTitle>Agent Mascot</AssemblyTitle>
     <Product>Agent Mascot</Product>
-    <Description>Desktop mascot notifications for Codex and Claude</Description>
+    <Description>Desktop mascot notifications for coding agents</Description>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>

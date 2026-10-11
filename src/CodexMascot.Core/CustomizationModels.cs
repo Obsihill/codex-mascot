@@ -79,6 +79,16 @@ public sealed class MonitorConfiguration
     public int RecentSessionLimit { get; set; } = 100;
     public string? CodexHome { get; set; }
     public string? ClaudeHome { get; set; }
+    public string? GeminiHome { get; set; }
+    public string? QwenHome { get; set; }
+    public string? CopilotHome { get; set; }
+    public string? OpenCodeHome { get; set; }
+    public string? CursorHome { get; set; }
+    public string? AntigravityHome { get; set; }
+    public string? KimiHome { get; set; }
+    public string? WindsurfHome { get; set; }
+    public string? KiroHome { get; set; }
+    public string? AmpHome { get; set; }
     // "codex", "claude" or "both": which agents the monitor watches.
     public string Provider { get; set; } = "both";
     public string? ProjectFilter { get; set; }

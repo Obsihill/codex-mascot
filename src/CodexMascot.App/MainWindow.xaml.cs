@@ -66,6 +66,16 @@ public partial class MainWindow : Window
         _presentations.Feedback += (_, text) => Log(text);
         CodexHomeTextBox.Text = config.Monitor.CodexHome ?? HookIntegration.DefaultHomeFor(AgentKind.Codex);
         ClaudeHomeTextBox.Text = config.Monitor.ClaudeHome ?? HookIntegration.DefaultHomeFor(AgentKind.Claude);
+        GeminiHomeTextBox.Text = config.Monitor.GeminiHome ?? HookIntegration.DefaultHomeFor(AgentKind.Gemini);
+        QwenHomeTextBox.Text = config.Monitor.QwenHome ?? HookIntegration.DefaultHomeFor(AgentKind.Qwen);
+        CopilotHomeTextBox.Text = config.Monitor.CopilotHome ?? HookIntegration.DefaultHomeFor(AgentKind.Copilot);
+        OpenCodeHomeTextBox.Text = config.Monitor.OpenCodeHome ?? HookIntegration.DefaultHomeFor(AgentKind.OpenCode);
+        CursorHomeTextBox.Text = config.Monitor.CursorHome ?? HookIntegration.DefaultHomeFor(AgentKind.Cursor);
+        AntigravityHomeTextBox.Text = config.Monitor.AntigravityHome ?? HookIntegration.DefaultHomeFor(AgentKind.Antigravity);
+        KimiHomeTextBox.Text = config.Monitor.KimiHome ?? HookIntegration.DefaultHomeFor(AgentKind.Kimi);
+        WindsurfHomeTextBox.Text = config.Monitor.WindsurfHome ?? HookIntegration.DefaultHomeFor(AgentKind.Windsurf);
+        KiroHomeTextBox.Text = config.Monitor.KiroHome ?? HookIntegration.DefaultHomeFor(AgentKind.Kiro);
+        AmpHomeTextBox.Text = config.Monitor.AmpHome ?? HookIntegration.DefaultHomeFor(AgentKind.Amp);
         _monitorPaused = !config.Monitor.AutoStart;
         _monitorEditTimer.Tick += async (_, _) =>
         {
@@ -74,6 +84,16 @@ public partial class MainWindow : Window
         };
         CodexHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
         ClaudeHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
+        GeminiHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
+        QwenHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
+        CopilotHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
+        OpenCodeHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
+        CursorHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
+        AntigravityHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
+        KimiHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
+        WindsurfHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
+        KiroHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
+        AmpHomeTextBox.TextChanged += (_, _) => ScheduleMonitorUpdate();
         _tray = new Forms.NotifyIcon { Text = AppBrand.Name };
         _trayTheme = new TrayThemeIcon(_tray);
         _tray.Visible = true;
@@ -101,17 +121,40 @@ public partial class MainWindow : Window
     }
 
     private string ProviderSetting() => "both";
-    private IReadOnlyList<AgentKind> EnabledKinds() => new[] { AgentKind.Codex, AgentKind.Claude }
-        .Where(kind => !string.IsNullOrWhiteSpace(kind == AgentKind.Claude ? ClaudeHomeTextBox.Text : CodexHomeTextBox.Text)).ToArray();
+    private IReadOnlyList<AgentKind> EnabledKinds() => new[] { AgentKind.Codex, AgentKind.Claude, AgentKind.Gemini, AgentKind.Qwen, AgentKind.Copilot, AgentKind.OpenCode, AgentKind.Cursor, AgentKind.Antigravity, AgentKind.Kimi, AgentKind.Windsurf, AgentKind.Kiro, AgentKind.Amp }
+        .Where(kind => !string.IsNullOrWhiteSpace(HomeTextBox(kind).Text)).ToArray();
+
+    private System.Windows.Controls.TextBox HomeTextBox(AgentKind kind) => kind switch
+    {
+        AgentKind.Codex => CodexHomeTextBox, AgentKind.Claude => ClaudeHomeTextBox,
+        AgentKind.Gemini => GeminiHomeTextBox, AgentKind.Qwen => QwenHomeTextBox,
+        AgentKind.Copilot => CopilotHomeTextBox, AgentKind.OpenCode => OpenCodeHomeTextBox,
+        AgentKind.Cursor => CursorHomeTextBox,
+        AgentKind.Antigravity => AntigravityHomeTextBox, AgentKind.Kimi => KimiHomeTextBox,
+        AgentKind.Windsurf => WindsurfHomeTextBox,
+        AgentKind.Kiro => KiroHomeTextBox,
+        AgentKind.Amp => AmpHomeTextBox,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+    };
 
     // Preserve empty paths: they explicitly disable monitoring for that agent.
     private string HomeFor(AgentKind kind)
     {
-        var text = (kind == AgentKind.Claude ? ClaudeHomeTextBox.Text : CodexHomeTextBox.Text).Trim();
+        var text = HomeTextBox(kind).Text.Trim();
         return text.Length == 0 ? "" : Path.GetFullPath(text);
     }
     private void BrowseClaudeHome_OnClick(object sender, RoutedEventArgs e)
         => BrowseInto(ClaudeHomeTextBox, Loc.T("Claude Code 데이터 폴더 (.claude)를 선택하세요."));
+    private void BrowseGeminiHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(GeminiHomeTextBox, "Gemini CLI data folder (.gemini)");
+    private void BrowseQwenHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(QwenHomeTextBox, "Qwen Code data folder (.qwen)");
+    private void BrowseCopilotHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(CopilotHomeTextBox, "Copilot CLI data folder (.copilot)");
+    private void BrowseOpenCodeHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(OpenCodeHomeTextBox, "OpenCode config folder (plugins)");
+    private void BrowseCursorHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(CursorHomeTextBox, "Cursor user hook folder (.cursor)");
+    private void BrowseAntigravityHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(AntigravityHomeTextBox, "Antigravity data folder (.gemini)");
+    private void BrowseKimiHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(KimiHomeTextBox, "Kimi Code data folder (.kimi-code)");
+    private void BrowseWindsurfHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(WindsurfHomeTextBox, "Windsurf/Devin hook folder (.codeium/windsurf)");
+    private void BrowseKiroHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(KiroHomeTextBox, "Kiro CLI V3 hook folder (.kiro)");
+    private void BrowseAmpHome_OnClick(object sender, RoutedEventArgs e) => BrowseInto(AmpHomeTextBox, "Amp local plugin folder (.config/amp)");
 
     private async Task StartMonitoring()
     {
@@ -125,6 +168,16 @@ public partial class MainWindow : Window
             var kinds = EnabledKinds();
             _customization.Configuration.Monitor.CodexHome = HomeFor(AgentKind.Codex);
             _customization.Configuration.Monitor.ClaudeHome = HomeFor(AgentKind.Claude);
+            _customization.Configuration.Monitor.GeminiHome = HomeFor(AgentKind.Gemini);
+            _customization.Configuration.Monitor.QwenHome = HomeFor(AgentKind.Qwen);
+            _customization.Configuration.Monitor.CopilotHome = HomeFor(AgentKind.Copilot);
+            _customization.Configuration.Monitor.OpenCodeHome = HomeFor(AgentKind.OpenCode);
+            _customization.Configuration.Monitor.CursorHome = HomeFor(AgentKind.Cursor);
+            _customization.Configuration.Monitor.AntigravityHome = HomeFor(AgentKind.Antigravity);
+            _customization.Configuration.Monitor.KimiHome = HomeFor(AgentKind.Kimi);
+            _customization.Configuration.Monitor.WindsurfHome = HomeFor(AgentKind.Windsurf);
+            _customization.Configuration.Monitor.KiroHome = HomeFor(AgentKind.Kiro);
+            _customization.Configuration.Monitor.AmpHome = HomeFor(AgentKind.Amp);
             _customization.Configuration.Monitor.Provider = ProviderSetting();
             _customization.Save();
             _aggregator.Clear();
@@ -190,7 +243,8 @@ public partial class MainWindow : Window
         {
             // Capture active chats on the UI thread for each rescan, including
             // turns that started after this picker was opened.
-            var activeEntries = monitor.Chats.Where(c => homes.Any(h => h.Kind == c.Agent) && _activeChats.Contains((c.Agent, c.Id)))
+            var activeEntries = monitor.Chats.Where(c => homes.Any(h => h.Kind == c.Agent) &&
+                (_activeChats.Contains((c.Agent, c.Id)) || c.Agent is AgentKind.Gemini or AgentKind.Qwen or AgentKind.Copilot or AgentKind.OpenCode or AgentKind.Cursor or AgentKind.Antigravity or AgentKind.Kimi or AgentKind.Windsurf or AgentKind.Kiro or AgentKind.Amp))
                 .Select(c => new ChatWatchEntry { Agent = c.Agent, Id = c.Id, ProjectPath = c.ProjectPath, Title = c.Title, Enabled = c.Enabled }).ToArray();
             return Task.Run<IReadOnlyList<ChatWatchEntry>>(() =>
                 homes.SelectMany(h => ChatWatchPolicy.Discover(h.Home, AgentAdapters.For(h.Kind), limit))
@@ -314,6 +368,18 @@ public partial class MainWindow : Window
         _tray.Text = AppBrand.Name + " · " + StateName(StateFor(visible));
     }
     private MascotState VisibleState() => StateFor(_aggregator.Jobs.Where(IsWatched));
+    private static AgentKind AgentForSource(string source) => source.StartsWith("Claude", StringComparison.Ordinal) ? AgentKind.Claude
+        : source.StartsWith("Gemini", StringComparison.Ordinal) ? AgentKind.Gemini
+        : source.StartsWith("Qwen", StringComparison.Ordinal) ? AgentKind.Qwen
+        : source.StartsWith("Copilot", StringComparison.Ordinal) ? AgentKind.Copilot
+        : source.StartsWith("OpenCode", StringComparison.Ordinal) ? AgentKind.OpenCode
+        : source.StartsWith("Cursor", StringComparison.Ordinal) ? AgentKind.Cursor
+        : source.StartsWith("Antigravity", StringComparison.Ordinal) ? AgentKind.Antigravity
+        : source.StartsWith("Kimi", StringComparison.Ordinal) ? AgentKind.Kimi
+        : source.StartsWith("Windsurf", StringComparison.Ordinal) ? AgentKind.Windsurf
+        : source.StartsWith("Kiro", StringComparison.Ordinal) ? AgentKind.Kiro
+        : source.StartsWith("Amp", StringComparison.Ordinal) ? AgentKind.Amp
+        : AgentKind.Codex;
     private static MascotState StateFor(IEnumerable<JobSnapshot> jobs)
     {
         var visible = jobs.ToArray();
@@ -325,7 +391,7 @@ public partial class MainWindow : Window
     }
     private bool IsWatched(JobSnapshot job)
     {
-        var kind = job.Source.StartsWith("Claude", StringComparison.Ordinal) ? AgentKind.Claude : AgentKind.Codex;
+        var kind = AgentForSource(job.Source);
         var path = job.ProjectPath;
         if (path is null) _projectByThread.TryGetValue((kind, job.ThreadId), out path);
         return ChatWatchPolicy.Allows(_customization.Configuration.Monitor, kind, job.ThreadId, path);
@@ -345,7 +411,7 @@ public partial class MainWindow : Window
             .ThenByDescending(j => j.NeedsAttention || j.HasUnreadResult)
             .ThenByDescending(j => j.LastUpdated)
             .FirstOrDefault();
-        return ranked?.Source.StartsWith("Claude", StringComparison.Ordinal) == true ? AgentKind.Claude : AgentKind.Codex;
+        return ranked is null ? AgentKind.Codex : AgentForSource(ranked.Source);
     }
     private void Overlay_OnClicked(object? sender, EventArgs e)
     {
@@ -373,7 +439,7 @@ public partial class MainWindow : Window
     private void DismissAgentNotification(AgentKind kind)
     {
         foreach (var job in _aggregator.Jobs.Where(j =>
-            (j.Source.StartsWith("Claude", StringComparison.Ordinal) ? AgentKind.Claude : AgentKind.Codex) == kind).ToArray())
+            AgentForSource(j.Source) == kind).ToArray())
         {
             _aggregator.Acknowledge(job.ThreadId);
         }
@@ -386,7 +452,7 @@ public partial class MainWindow : Window
         if (_projectSelection is not null) { _projectSelection.Activate(); return; }
         _monitorEditTimer.Stop(); _monitorRefreshRequested = false;
         var paused = _monitorPaused;
-        var codex = CodexHomeTextBox.Text; var claude = ClaudeHomeTextBox.Text;
+        var allHomeValues = Enum.GetValues<AgentKind>().ToDictionary(k => k, k => HomeTextBox(k).Text);
         ShellRoot.Children.Remove(WorkspacePanel);
         WorkspacePanel.Visibility = Visibility.Visible;
         var settings = new SettingsWindow(_customization, WorkspacePanel) { Owner = this };
@@ -396,6 +462,15 @@ public partial class MainWindow : Window
         {
             var monitor = _customization.Configuration.Monitor;
             monitor.CodexHome = HomeFor(AgentKind.Codex); monitor.ClaudeHome = HomeFor(AgentKind.Claude);
+            monitor.GeminiHome = HomeFor(AgentKind.Gemini); monitor.QwenHome = HomeFor(AgentKind.Qwen);
+            monitor.CopilotHome = HomeFor(AgentKind.Copilot);
+            monitor.OpenCodeHome = HomeFor(AgentKind.OpenCode);
+            monitor.CursorHome = HomeFor(AgentKind.Cursor);
+            monitor.AntigravityHome = HomeFor(AgentKind.Antigravity);
+            monitor.KimiHome = HomeFor(AgentKind.Kimi);
+            monitor.WindsurfHome = HomeFor(AgentKind.Windsurf);
+            monitor.KiroHome = HomeFor(AgentKind.Kiro);
+            monitor.AmpHome = HomeFor(AgentKind.Amp);
             monitor.AutoStart = !_monitorPaused;
         };
         settings.Saved += (_, _) => ApplyConfiguration();
@@ -405,10 +480,10 @@ public partial class MainWindow : Window
             if (!settings.Accepted)
             {
                 _monitorPaused = paused;
-                CodexHomeTextBox.Text = codex; ClaudeHomeTextBox.Text = claude;
+                foreach (var pair in allHomeValues) HomeTextBox(pair.Key).Text = pair.Value;
                 _monitorEditTimer.Stop();
             }
-            else if (_monitorRefreshRequested || paused != _monitorPaused || codex != CodexHomeTextBox.Text || claude != ClaudeHomeTextBox.Text)
+            else if (_monitorRefreshRequested || paused != _monitorPaused || allHomeValues.Any(pair => HomeTextBox(pair.Key).Text != pair.Value))
                 ScheduleMonitorUpdate();
             _monitorRefreshRequested = false;
             WorkspacePanel.Visibility = Visibility.Collapsed; ShellRoot.Children.Add(WorkspacePanel);

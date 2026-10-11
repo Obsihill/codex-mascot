@@ -38,7 +38,8 @@ internal static class Program
             Console.WriteLine("Claude desktop window found: " + (CodexDesktopActivator.FindWindow(AgentKind.Claude) != IntPtr.Zero));
             return;
         }
-        var dir = Path.Combine(Path.GetTempPath(), "mascot-app-tests-" + Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(args.FirstOrDefault() == "--external-hook-tests" ? Directory.GetCurrentDirectory() : Path.GetTempPath(),
+            "mascot-app-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         try
         {
@@ -48,6 +49,11 @@ internal static class Program
             {
                 NotificationDeliveryAppTests.Run(Check);
                 Console.WriteLine($"PASS: {_count} notification delivery assertions."); return;
+            }
+            if (args.FirstOrDefault() == "--external-hook-tests")
+            {
+                ExternalAgentTests.Run(Check, dir);
+                Console.WriteLine($"PASS: {_count} external hook assertions."); return;
             }
             if (args.FirstOrDefault() == "--settings-validation")
             {
