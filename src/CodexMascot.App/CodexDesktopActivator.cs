@@ -53,12 +53,26 @@ public static class CodexDesktopActivator
         return candidate;
     }
 
-    private static bool Matches(AgentKind kind, string name) => kind == AgentKind.Claude
-        ? name.Equals("Claude", StringComparison.OrdinalIgnoreCase)
-        : name.Equals("Codex", StringComparison.OrdinalIgnoreCase) || name.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase);
+    private static bool Matches(AgentKind kind, string name) => kind switch
+    {
+        AgentKind.Claude => name.Equals("Claude", StringComparison.OrdinalIgnoreCase),
+        AgentKind.Codex => name.Equals("Codex", StringComparison.OrdinalIgnoreCase) || name.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase),
+        AgentKind.Cursor => name.Equals("Cursor", StringComparison.OrdinalIgnoreCase),
+        _ => false // Never raise an unrelated desktop window for a CLI-only agent.
+    };
 
     internal static bool IsDesktopExecutable(AgentKind kind, string? path)
-        => kind == AgentKind.Claude ? IsClaudeDesktopExecutable(path) : IsDesktopExecutable(path);
+        => kind switch { AgentKind.Claude => IsClaudeDesktopExecutable(path), AgentKind.Codex => IsDesktopExecutable(path),
+            AgentKind.Cursor => IsCursorDesktopExecutable(path), _ => false };
+
+    internal static bool IsCursorDesktopExecutable(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        var parts = path.Replace('/', '\\').Split('\\', StringSplitOptions.RemoveEmptyEntries);
+        return parts[^1].Equals("Cursor.exe", StringComparison.OrdinalIgnoreCase) &&
+            !parts.Any(p => p.Equals("node_modules", StringComparison.OrdinalIgnoreCase) ||
+                p.Equals("bin", StringComparison.OrdinalIgnoreCase) || p.Equals("resources", StringComparison.OrdinalIgnoreCase));
+    }
 
     internal static bool IsDesktopExecutable(string? path)
     {

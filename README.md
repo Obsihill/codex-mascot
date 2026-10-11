@@ -1,6 +1,6 @@
 # Agent Mascot for Windows
 
-Codex와 Claude Code에서 **이미 진행 중인 작업**의 상태를 캐릭터가 실시간으로 알려주는 Windows 10/11 x64 트레이 앱입니다. 작업을 끝내면 캐릭터가 팝업과 소리로 알려줍니다.
+Codex와 Claude Code의 로컬 기록, Gemini CLI·Qwen Code·Copilot CLI·OpenCode·Cursor·Antigravity·Kimi Code·Windsurf/Devin Desktop·Kiro CLI V3·Amp의 Hook/플러그인 이벤트를 읽어 작업 상태를 알려주는 Windows 10/11 x64 트레이 앱입니다. 작업을 끝내면 캐릭터가 팝업과 소리로 알려줍니다.
 
 ![메인 창](docs/images/main-window.png)
 
@@ -61,6 +61,14 @@ AgentMascot/
 - **알림** — 팝업 클릭 시 Codex 창 열기, 알림 유지
 - **연결** — Codex/Claude 데이터 폴더, 감시 상태·프로젝트 선택
 - **언어** — 한국어 / English 즉시 전환
+
+### 추가 에이전트 연결
+
+연결 설정에서 각 도구의 데이터 폴더를 선택하면 Hook 또는 로컬 플러그인을 자동 등록합니다. 빈 경로는 해당 도구를 감시하지 않습니다. Gemini CLI는 `GEMINI_CLI_HOME`(기본 `~/.gemini`), Qwen Code는 `QWEN_HOME`(기본 `~/.qwen`), Copilot CLI는 `COPILOT_HOME`(기본 `~/.copilot`), OpenCode는 `OPENCODE_CONFIG_DIR`로 지정한 설정 폴더를 선택하세요. Cursor는 사용자 Hook 폴더 `~/.cursor`, Antigravity는 `~/.gemini`, Kimi Code는 `~/.kimi-code`, Windsurf/Devin Desktop은 `~/.codeium/windsurf`, Kiro CLI V3는 `~/.kiro`, Amp는 로컬 설정 폴더 `~/.config/amp`(또는 `XDG_CONFIG_HOME/amp`)를 선택합니다. 설정 파일의 기존 항목은 보존하고 갱신 전 백업합니다.
+
+이 도구들은 Hook/플러그인을 등록한 **이후의 이벤트**부터 감시합니다. 기록 형식이 Codex/Claude와 달라 과거 채팅은 자동으로 채우지 않으며, 수신된 채팅이 감시 프로젝트 선택창에 나타납니다. Antigravity는 첫 모델 호출과 완전히 대기 상태가 된 완료 이벤트를 사용하고, Kimi Code는 시작·승인 요청/결과·완료·실패·중단 이벤트를 사용합니다. Windsurf/Devin Desktop은 질문 제출·응답 완료만 감지합니다. Kiro CLI V3는 사용자 메시지 제출·작업 완료·세션 종료를 감지합니다. Amp 로컬 플러그인은 작업 시작·완료·실패·취소를 감지합니다. Kiro의 전역 Hook은 CLI V3에서 지원하며 IDE 전역 연동을 뜻하지 않습니다. Amp는 이 컴퓨터에서 실행되는 로컬 플러그인만 감시합니다. Cursor와 Antigravity, Windsurf/Devin, Kiro, Amp는 승인 대기 전용 Hook을 연결하지 않았습니다. CLI 전용 도구의 알림을 클릭하면 Agent Mascot 창이 열립니다. 임의의 터미널이나 Codex 창을 대신 활성화하지 않습니다. Cursor 완료 알림을 클릭하면 Cursor 창을 엽니다. 계정 로그인과 실제 알림 검증은 각 도구에서 별도로 진행해야 합니다.
+
+DeepSeek는 독립 앱 Hook이 아닌 다른 CLI의 모델로 사용할 때 해당 CLI의 연동으로 감시할 수 있습니다. Aider는 안정적인 공식 작업 생명주기 Hook을 확인할 수 없어 자동 감시 대상에 넣지 않았습니다.
 
 ## 문서·빌드
 

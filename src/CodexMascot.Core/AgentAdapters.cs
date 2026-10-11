@@ -1,6 +1,6 @@
 namespace CodexMascot.Core;
 
-public enum AgentKind { Codex, Claude }
+public enum AgentKind { Codex, Claude, Gemini, Qwen, Copilot, OpenCode, Cursor, Antigravity, Kimi, Windsurf, Kiro, Amp }
 
 // Claude transcripts carry no turn identifier, so the adapter derives one from the
 // last human prompt and keeps it here per file. Codex adapters ignore this state.
@@ -34,9 +34,69 @@ public static class AgentAdapters
 {
     public static IAgentAdapter Codex { get; } = new CodexAgentAdapter();
     public static IAgentAdapter Claude { get; } = new ClaudeAgentAdapter();
-    public static IAgentAdapter For(AgentKind kind) => kind == AgentKind.Claude ? Claude : Codex;
-    public static AgentKind Parse(string? name) =>
-        string.Equals(name, "claude", StringComparison.OrdinalIgnoreCase) ? AgentKind.Claude : AgentKind.Codex;
+    public static IAgentAdapter Gemini { get; } = new HookOnlyAgentAdapter(AgentKind.Gemini, "Gemini CLI");
+    public static IAgentAdapter Qwen { get; } = new HookOnlyAgentAdapter(AgentKind.Qwen, "Qwen Code");
+    public static IAgentAdapter Copilot { get; } = new HookOnlyAgentAdapter(AgentKind.Copilot, "Copilot CLI");
+    public static IAgentAdapter OpenCode { get; } = new HookOnlyAgentAdapter(AgentKind.OpenCode, "OpenCode");
+    public static IAgentAdapter Cursor { get; } = new HookOnlyAgentAdapter(AgentKind.Cursor, "Cursor");
+    public static IAgentAdapter Antigravity { get; } = new HookOnlyAgentAdapter(AgentKind.Antigravity, "Antigravity");
+    public static IAgentAdapter Kimi { get; } = new HookOnlyAgentAdapter(AgentKind.Kimi, "Kimi Code");
+    public static IAgentAdapter Windsurf { get; } = new HookOnlyAgentAdapter(AgentKind.Windsurf, "Windsurf/Devin Desktop");
+    public static IAgentAdapter Kiro { get; } = new HookOnlyAgentAdapter(AgentKind.Kiro, "Kiro CLI V3");
+    public static IAgentAdapter Amp { get; } = new HookOnlyAgentAdapter(AgentKind.Amp, "Amp");
+    public static IAgentAdapter For(AgentKind kind) => kind switch
+    {
+        AgentKind.Codex => Codex, AgentKind.Claude => Claude, AgentKind.Gemini => Gemini,
+        AgentKind.Qwen => Qwen, AgentKind.Copilot => Copilot, AgentKind.OpenCode => OpenCode,
+        AgentKind.Cursor => Cursor, AgentKind.Antigravity => Antigravity,
+        AgentKind.Kimi => Kimi, AgentKind.Windsurf => Windsurf, AgentKind.Kiro => Kiro, AgentKind.Amp => Amp,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+    };
+    public static AgentKind Parse(string? name) => Enum.TryParse<AgentKind>(name, true, out var kind) && Enum.IsDefined(kind)
+        ? kind : throw new ArgumentException("Unknown agent kind", nameof(name));
+}
+
+// These agents expose supported hook events but do not share Codex/Claude's JSONL layout.
+// Never interpret an unrelated transcript as a Codex transcript.
+public sealed class HookOnlyAgentAdapter(AgentKind kind, string displayName) : IAgentAdapter
+{
+    public AgentKind Kind => kind;
+    public string DisplayName => displayName;
+    public string DefaultHome => kind switch
+    {
+        AgentKind.Gemini => Environment.GetEnvironmentVariable("GEMINI_CLI_HOME") ?? "",
+        AgentKind.Qwen => Environment.GetEnvironmentVariable("QWEN_HOME") ?? "",
+        AgentKind.Copilot => Environment.GetEnvironmentVariable("COPILOT_HOME") ?? "",
+        AgentKind.OpenCode => Environment.GetEnvironmentVariable("OPENCODE_CONFIG_DIR") ?? "",
+        AgentKind.Cursor => "",
+        AgentKind.Antigravity => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini"),
+        AgentKind.Kimi => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".kimi-code"),
+        AgentKind.Windsurf => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codeium", "windsurf"),
+        AgentKind.Kiro => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".kiro"),
+        AgentKind.Amp => Path.Combine(Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") ??
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"), "amp"),
+        _ => ""
+    };
+    public string HookConfigFileName => kind switch
+    {
+        AgentKind.Copilot => Path.Combine("hooks", "agent-mascot.json"),
+        AgentKind.OpenCode => Path.Combine("plugins", "agent-mascot.js"),
+        AgentKind.Cursor => "hooks.json",
+        AgentKind.Antigravity => Path.Combine("config", "hooks.json"),
+        AgentKind.Kimi => "config.toml",
+        AgentKind.Windsurf => "hooks.json",
+        AgentKind.Kiro => Path.Combine("hooks", "agent-mascot.json"),
+        AgentKind.Amp => Path.Combine("plugins", "agent-mascot.js"),
+        _ => "settings.json"
+    };
+    public string TranscriptSource => displayName + " 기록";
+    public string HookSource => displayName + " Hook";
+    public int HeadLines => 0;
+    public string SessionsRoot(string home) => Path.Combine(home, ".agent-mascot-no-transcripts");
+    public string MissingRootMessage => displayName + ": Hook 수신 대기 중";
+    public SessionIdentity? ReadIdentity(IReadOnlyList<string> head) => null;
+    public CodexEvent? ParseTranscript(string line, TranscriptContext context, bool replay) => null;
+    public CodexEvent? ParseHook(string json, bool replay) => ExternalHookParser.Parse(kind, json, replay);
 }
 
 public sealed class CodexAgentAdapter : IAgentAdapter
